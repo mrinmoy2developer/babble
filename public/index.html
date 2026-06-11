@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Babble — spell what you hear</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- drifting background bubbles -->
+  <div id="bg-bubbles" aria-hidden="true">
+    <span style="--x:8%;--sz:70px;--d:0s;--t:22s"></span>
+    <span style="--x:24%;--sz:40px;--d:6s;--t:18s"></span>
+    <span style="--x:46%;--sz:90px;--d:2s;--t:26s"></span>
+    <span style="--x:66%;--sz:48px;--d:9s;--t:20s"></span>
+    <span style="--x:82%;--sz:64px;--d:4s;--t:24s"></span>
+    <span style="--x:93%;--sz:34px;--d:11s;--t:16s"></span>
+  </div>
+
+  <!-- intro splash -->
+  <div id="intro" class="intro on">
+    <div class="intro-card">
+      <h1 class="logo big" aria-label="Babble">
+        <span class="logo-bubble">🗣️</span><span class="wa" style="--i:0">B</span><span class="wa" style="--i:1">a</span><span class="wa" style="--i:2">b</span><span class="wa" style="--i:3">b</span><span class="wa" style="--i:4">l</span><span class="wa" style="--i:5">e</span>
+      </h1>
+      <p class="intro-tag">Hear a word in a strange tongue.<br>Spell it — closest <em>sound</em> wins.</p>
+      <div class="flow">
+        <div class="flow-step" style="--s:0"><span class="fi">🔊</span><span class="fl">hear</span></div>
+        <span class="flow-arrow" style="--s:1">→</span>
+        <div class="flow-step" style="--s:2"><span class="fi">✍️</span><span class="fl">spell</span></div>
+        <span class="flow-arrow" style="--s:3">→</span>
+        <div class="flow-step" style="--s:4"><span class="fi">〰️</span><span class="fl">compare</span></div>
+        <span class="flow-arrow" style="--s:5">→</span>
+        <div class="flow-step" style="--s:6"><span class="fi">🏆</span><span class="fl">win</span></div>
+      </div>
+      <button id="btn-enter" class="primary big-btn">▶ Let’s Babble</button>
+    </div>
+  </div>
+
+  <header class="topbar">
+    <h1 class="logo" aria-label="Babble">
+      <span class="logo-bubble">🗣️</span><span class="wa" style="--i:0">B</span><span class="wa" style="--i:1">a</span><span class="wa" style="--i:2">b</span><span class="wa" style="--i:3">b</span><span class="wa" style="--i:4">l</span><span class="wa" style="--i:5">e</span>
+    </h1>
+    <p class="tagline">Hear a word in a strange tongue. Spell it. Closest <em>sound</em> wins.</p>
+  </header>
+
+  <main id="app">
+    <!-- JOIN -->
+    <section id="screen-join" class="screen active card">
+      <h2>Play</h2>
+      <label>Your name
+        <input id="name-input" maxlength="20" placeholder="e.g. Ada" autocomplete="off" />
+      </label>
+      <div class="row">
+        <button id="btn-create" class="primary">Create room</button>
+      </div>
+      <div class="divider">or</div>
+      <div class="row join-row">
+        <input id="code-input" maxlength="4" placeholder="CODE" class="code" autocomplete="off" />
+        <button id="btn-join">Join</button>
+      </div>
+      <p id="join-error" class="error"></p>
+
+      <div class="public-lobbies">
+        <div class="pl-head">
+          <h3>Public games</h3>
+          <button id="btn-refresh-rooms" class="ghost small">⟳ Refresh</button>
+        </div>
+        <ul id="rooms-list" class="rooms"><li class="rooms-empty">No public games right now — create one!</li></ul>
+      </div>
+    </section>
+
+    <!-- LOBBY -->
+    <section id="screen-lobby" class="screen card">
+      <div class="lobby-head">
+        <h2>Lobby</h2>
+        <div class="roomcode">Room <span id="room-code">----</span></div>
+      </div>
+
+      <div class="lobby-grid">
+        <div>
+          <h3>Players</h3>
+          <ul id="player-list" class="players"></ul>
+        </div>
+
+        <div id="settings" class="settings">
+          <h3>Settings <span class="host-only-tag">host only</span></h3>
+
+          <label>Word sources (what you'll hear)</label>
+          <div id="source-checks" class="checks"></div>
+
+          <label>Answer language (what you spell in)
+            <select id="answer-lang">
+              <option value="en">English</option>
+              <option value="bn">Bengali (বাংলা)</option>
+              <option value="es">Spanish</option>
+            </select>
+          </label>
+
+          <div class="sliders">
+            <label>Rounds <output id="rounds-out">5</output>
+              <input id="rounds" type="range" min="1" max="20" value="5" />
+            </label>
+            <label>Seconds / round <output id="secs-out">45</output>
+              <input id="secs" type="range" min="10" max="180" step="5" value="45" />
+            </label>
+            <label>Reveal seconds <output id="reveal-out">15</output>
+              <input id="reveal" type="range" min="5" max="60" step="1" value="15" />
+            </label>
+            <label>Difficulty (word length) <output id="diff-out">2</output>
+              <input id="diff" type="range" min="1" max="5" value="2" />
+            </label>
+          </div>
+
+          <div class="toggles">
+            <label class="switch"><input type="checkbox" id="set-public" checked> 🌐 Public lobby (listed for anyone to join)</label>
+            <label class="switch"><input type="checkbox" id="set-preview" checked> 〰️ Allow waveform preview before submitting</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="row end">
+        <button id="btn-leave" class="ghost">Leave</button>
+        <button id="btn-start" class="primary">Start game</button>
+      </div>
+      <p id="lobby-hint" class="hint"></p>
+    </section>
+
+    <!-- PLAY -->
+    <section id="screen-play" class="screen card">
+      <div class="play-head">
+        <span class="pill">Round <span id="round-now">1</span>/<span id="round-total">5</span></span>
+        <span class="pill" id="source-pill">—</span>
+        <span class="pill timer" id="timer">--</span>
+      </div>
+
+      <div class="listen">
+        <div class="listen-btns">
+          <button id="btn-replay" class="replay">▶ Play the word</button>
+          <button id="btn-slow" class="ghost">🐢 Slower</button>
+        </div>
+        <p class="listen-hint">Replay as many times as you like. <span id="syl-hint"></span></p>
+      </div>
+
+      <form id="guess-form" class="guess">
+        <label id="guess-label">Spell what you heard (English)</label>
+        <input id="guess-input" autocomplete="off" placeholder="type your best guess…" />
+        <div class="row">
+          <button type="submit" class="primary">Lock in guess</button>
+          <button type="button" id="btn-hear-self" class="ghost">🔊 Hear my guess</button>
+        </div>
+      </form>
+      <p id="guess-status" class="hint"></p>
+      <p id="submitted-count" class="count"></p>
+
+      <div id="preview-area" class="preview-area">
+        <div class="orig-wave-wrap">
+          <span class="wave-label">Original <small>(the sound you're matching)</small></span>
+          <canvas id="orig-wave" class="wave target"></canvas>
+        </div>
+        <h4>Your tries <small class="hint-inline">— hear a spelling, compare its shape to the original, then submit the best one</small></h4>
+        <ul id="tries-list" class="tries"><li class="tries-empty">Type a guess and press “Hear my guess” to stack a try here.</li></ul>
+      </div>
+    </section>
+
+    <!-- REVEAL -->
+    <section id="screen-reveal" class="screen card">
+      <h2>Round <span id="reveal-round">1</span> results</h2>
+      <div class="reveal-target">
+        <div class="reveal-target-head">
+          <button id="btn-replay-target" class="replay small">▶ Original</button>
+          <span class="target-meta">Source: <b id="reveal-source">—</b> · Sounds like
+            <code id="reveal-phon">—</code></span>
+        </div>
+        <canvas id="target-wave" class="wave target"></canvas>
+      </div>
+      <p class="legend">Each player's waveform is overlaid on the <span class="ghost-key">original</span> so you can see how close their <span class="guess-key">guess</span> sounds.</p>
+      <ul id="reveal-list" class="results"></ul>
+      <div class="reveal-foot">
+        <p class="hint" id="reveal-next-hint">Next round in <span id="reveal-countdown">—</span>s…</p>
+        <button id="btn-next-round" class="primary">Next round ▶</button>
+      </div>
+    </section>
+
+    <!-- GAME OVER -->
+    <section id="screen-over" class="screen card">
+      <h2>🏆 Final standings</h2>
+      <ul id="final-list" class="results final"></ul>
+      <div class="row end">
+        <button id="btn-back-lobby" class="primary">Back to lobby</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- in-game heads-up controls (shown only during play/reveal) -->
+  <div id="hud" class="hud">
+    <button id="btn-help" class="hud-btn" title="How to play">?</button>
+    <button id="btn-pause" class="hud-btn" title="Pause (host)">⏸</button>
+    <button id="btn-exit" class="hud-btn danger" title="Exit game">⏏</button>
+  </div>
+
+  <!-- transient notifications (who locked in, etc.) -->
+  <div id="toasts" class="toasts"></div>
+
+  <!-- paused overlay -->
+  <div id="paused-overlay" class="overlay">
+    <div class="overlay-box">
+      <div class="big">⏸ Paused</div>
+      <p id="paused-sub">Waiting for the host to resume…</p>
+      <button id="btn-resume" class="primary">Resume</button>
+    </div>
+  </div>
+
+  <!-- help modal -->
+  <div id="help-modal" class="overlay">
+    <div class="overlay-box card help">
+      <h2>How to play 🗣️</h2>
+      <ol>
+        <li>An engine speaks a word from a real-ish language or pure <b>gibberish</b>.</li>
+        <li>Press <b>▶ Play the word</b> (replay or 🐢 slower as much as you like).</li>
+        <li><b>Spell what you heard</b> in the answer language. Use <b>🔊 Hear my guess</b> to compare — if the host enabled it, each try stacks with its waveform so you can pick the closest.</li>
+        <li>When time runs out, every guess is <b>pronounced and scored</b> by how close it <i>sounds</i> to the original. Closest sound wins the round.</li>
+      </ol>
+      <p class="hint">Scoring is by sound, not spelling — <code>banana</code> and <code>bununa</code> score almost the same.</p>
+      <button id="btn-help-close" class="primary">Got it</button>
+    </div>
+  </div>
+
+  <!-- loading screen between rounds -->
+  <div id="loading" class="overlay loading-overlay">
+    <div class="overlay-box">
+      <div class="equalizer"><span></span><span></span><span></span><span></span><span></span></div>
+      <p id="loading-msg">Summoning a word…</p>
+    </div>
+  </div>
+
+  <canvas id="confetti" class="confetti"></canvas>
+
+  <footer class="foot">
+    <span id="tts-warn" class="warn"></span>
+  </footer>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>

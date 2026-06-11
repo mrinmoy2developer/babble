@@ -1,0 +1,21 @@
+{
+  "name": "babble",
+  "version": "1.0.0",
+  "description": "Online multiplayer 'spell what you hear' game. An engine generates words (real languages or gibberish), players hear them and spell them, and a phonetic decoder scores how close each guess sounds to the original.",
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node test/phonetics.test.js && node test/tts.test.js && node test/game.test.js",
+    "test:e2e": "node test/integration.test.js && node test/features.test.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.3"
+  }
+}
