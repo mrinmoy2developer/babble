@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 240" width="1100" height="240" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif"><rect width="1100" height="240" fill="#0f1020"/>
+      <g transform="translate(35,50)">
+        <rect width="220" height="140" rx="18" fill="#1d2046" stroke="#2c2f63"/>
+        <text x="110" y="66" font-size="46" text-anchor="middle">🔊</text>
+        <text x="110" y="100" font-size="24" font-weight="700" fill="#eef0ff" text-anchor="middle">Hear</text>
+        <text x="110" y="124" font-size="14" fill="#9aa0d0" text-anchor="middle">a generated word</text>
+      </g><text x="280" y="128" font-size="34" fill="#7c5cff" text-anchor="middle">→</text>
+      <g transform="translate(305,50)">
+        <rect width="220" height="140" rx="18" fill="#1d2046" stroke="#2c2f63"/>
+        <text x="110" y="66" font-size="46" text-anchor="middle">✍️</text>
+        <text x="110" y="100" font-size="24" font-weight="700" fill="#eef0ff" text-anchor="middle">Spell</text>
+        <text x="110" y="124" font-size="14" fill="#9aa0d0" text-anchor="middle">what you heard</text>
+      </g><text x="550" y="128" font-size="34" fill="#7c5cff" text-anchor="middle">→</text>
+      <g transform="translate(575,50)">
+        <rect width="220" height="140" rx="18" fill="#1d2046" stroke="#2c2f63"/>
+        <text x="110" y="66" font-size="46" text-anchor="middle">〰️</text>
+        <text x="110" y="100" font-size="24" font-weight="700" fill="#eef0ff" text-anchor="middle">Compare</text>
+        <text x="110" y="124" font-size="14" fill="#9aa0d0" text-anchor="middle">waveforms &amp; tweak</text>
+      </g><text x="820" y="128" font-size="34" fill="#7c5cff" text-anchor="middle">→</text>
+      <g transform="translate(845,50)">
+        <rect width="220" height="140" rx="18" fill="#1d2046" stroke="#2c2f63"/>
+        <text x="110" y="66" font-size="46" text-anchor="middle">🏆</text>
+        <text x="110" y="100" font-size="24" font-weight="700" fill="#eef0ff" text-anchor="middle">Win</text>
+        <text x="110" y="124" font-size="14" fill="#9aa0d0" text-anchor="middle">closest sound scores</text>
+      </g></svg>
