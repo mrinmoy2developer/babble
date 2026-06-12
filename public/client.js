@@ -224,7 +224,40 @@
     lock() { this.blip(520, 0.07); setTimeout(() => this.blip(780, 0.07), 70); },
     ding() { this.blip(880, 0.12); setTimeout(() => this.blip(1320, 0.16), 110); },
     win() { [523, 659, 784, 1047, 1319].forEach((f, i) => setTimeout(() => this.blip(f, 0.2, 'triangle', 0.22), i * 130)); },
+    // --- per-button click flavours (short, light) ---
+    pop() { this.blip(480 + Math.random() * 130, 0.07, 'sine', 0.15); },          // default: bubbly
+    clickPrimary() { this.blip(620, 0.06, 'triangle', 0.17); setTimeout(() => this.blip(950, 0.09, 'triangle', 0.15), 55); }, // confident up-boop
+    clickToggle() { this.blip(900, 0.045, 'sine', 0.12); },                        // soft tick
+    clickDanger() { this.blip(250, 0.06, 'square', 0.13); setTimeout(() => this.blip(170, 0.09, 'square', 0.11), 55); },      // low thunk
   };
+  // map a button to its click sound by class, then animate the press
+  function uiClick(btn, x, y) {
+    if (music.on) {
+      if (btn.classList.contains('danger')) sfx.clickDanger();
+      else if (btn.classList.contains('primary') || btn.classList.contains('big-btn')) sfx.clickPrimary();
+      else if (btn.classList.contains('seg') || btn.classList.contains('chat-toggle') ||
+               btn.classList.contains('music-toggle') || btn.classList.contains('hud-btn')) sfx.clickToggle();
+      else sfx.pop();
+    }
+    // springy press, independent of the CSS :active nudge
+    try {
+      btn.animate(
+        [{ transform: 'scale(1)' }, { transform: 'scale(0.9)' }, { transform: 'scale(1.06)' }, { transform: 'scale(1)' }],
+        { duration: 260, easing: 'cubic-bezier(.34,1.56,.64,1)' });
+    } catch (_) {}
+    // a little ripple splash at the touch point
+    if (x != null) {
+      const r = document.createElement('span');
+      r.className = 'tap-ripple';
+      r.style.left = x + 'px'; r.style.top = y + 'px';
+      document.body.appendChild(r);
+      r.addEventListener('animationend', () => r.remove());
+    }
+  }
+  document.addEventListener('pointerdown', (e) => {
+    const btn = e.target.closest && e.target.closest('button');
+    if (btn && !btn.disabled) uiClick(btn, e.clientX, e.clientY);
+  }, true);
 
   // ----- confetti ----------------------------------------------------------
   function confettiBurst() {
@@ -386,30 +419,50 @@
   // ----- playful background melody (synthesised, toggleable) ---------------
   const music = {
     on: localStorage.getItem('babble.music') !== 'off',
-    playing: false, timer: null, step: 0, master: null, tuneIdx: 0,
-    // a handful of playful tunes in friendly keys; same triangle-lead / sine-bass
-    // timbre, so they share the game's feel but the loop never gets stale.
+    playing: false, timer: null, step: 0, master: null, tuneIdx: 0, waves: null,
+    // a handful of playful tunes in friendly keys. each names its own lead
+    // instrument (piano / harp / bell / triangle) so the colour shifts as the
+    // music drifts from one tune to the next — but the warm sine bass keeps the
+    // whole thing grounded in Babble's feel.
     tunes: [
-      { // C major — the original, bright and bouncy
+      { lead: 'piano', // C major — bright and bouncy
         melody: [523.25, 659.25, 783.99, 880, 783.99, 659.25, 587.33, 659.25, 523.25, 659.25, 783.99, 1046.5],
-        bass: [130.81, 130.81, 174.61, 196.0],
-      },
-      { // A minor pentatonic — a touch wistful, hummable
+        bass: [130.81, 130.81, 174.61, 196.0] },
+      { lead: 'harp', // A minor pentatonic — a touch wistful, hummable
         melody: [440, 523.25, 587.33, 659.25, 783.99, 659.25, 587.33, 523.25, 440, 523.25, 659.25, 587.33],
-        bass: [110, 146.83, 164.81, 130.81],
-      },
-      { // G major — skippy and upbeat
+        bass: [110, 146.83, 164.81, 130.81] },
+      { lead: 'triangle', // G major — skippy and upbeat
         melody: [392, 493.88, 587.33, 783.99, 659.25, 587.33, 493.88, 587.33, 392, 493.88, 587.33, 783.99],
-        bass: [98, 146.83, 164.81, 130.81],
-      },
-      { // F major — round and warm
+        bass: [98, 146.83, 164.81, 130.81] },
+      { lead: 'piano', // F major — round and warm
         melody: [349.23, 440, 523.25, 698.46, 523.25, 440, 392, 440, 349.23, 523.25, 698.46, 523.25],
-        bass: [87.31, 116.54, 130.81, 98],
-      },
+        bass: [87.31, 116.54, 130.81, 98] },
+      { lead: 'harp', // D major — sparkly and open
+        melody: [587.33, 739.99, 880, 1174.66, 880, 739.99, 659.25, 739.99, 587.33, 440, 587.33, 739.99],
+        bass: [146.83, 110, 98, 110] },
+      { lead: 'bell', // E minor pentatonic — dreamy
+        melody: [659.25, 783.99, 880, 987.77, 1174.66, 987.77, 880, 783.99, 659.25, 783.99, 880, 987.77],
+        bass: [164.81, 123.47, 146.83, 110] },
     ],
+    // build (once) the richer timbres as cached PeriodicWaves — harmonic recipes
+    // that give plain oscillators a piano / harp / bell colour. cheap to reuse.
+    ensureWaves() {
+      const c = ctx(); if (!c || this.waves) return;
+      const make = (h) => {
+        const real = new Float32Array(h.length + 1), imag = new Float32Array(h.length + 1);
+        h.forEach((v, i) => { imag[i + 1] = v; });
+        return c.createPeriodicWave(real, imag, { disableNormalization: false });
+      };
+      this.waves = {
+        piano: make([1, 0.62, 0.42, 0.28, 0.18, 0.12, 0.08, 0.05]),
+        harp: make([1, 0.55, 0.42, 0.33, 0.26, 0.2, 0.14, 0.1, 0.07]),
+        bell: make([1, 0, 0.6, 0, 0.38, 0, 0.22, 0, 0.12]),
+      };
+    },
     start() {
       const c = ctx();
       if (!c || this.playing || !this.on) return;
+      this.ensureWaves();
       this.playing = true; this.step = 0;
       this.master = c.createGain(); this.master.gain.value = 0; this.master.connect(c.destination);
       this.master.gain.linearRampToValueAtTime(0.05, c.currentTime + 1.2);
@@ -419,17 +472,26 @@
       if (!this.playing) return;
       const c = ctx(); const t = c.currentTime; const beat = 0.32;
       const tune = this.tunes[this.tuneIdx];
-      this.note(tune.melody[this.step % tune.melody.length], t, beat * 0.9, 'triangle', 0.5);
-      if (this.step % 2 === 0) this.note(tune.bass[Math.floor(this.step / 2) % tune.bass.length], t, beat * 1.7, 'sine', 0.55);
+      this.note(tune.melody[this.step % tune.melody.length], t, beat * 0.9, tune.lead, 0.5);
+      if (this.step % 2 === 0) this.note(tune.bass[Math.floor(this.step / 2) % tune.bass.length], t, beat * 1.7, 'sine', 0.5);
+      // every other bar, a quick harp arpeggio sparkles over the top
+      if (this.step % 8 === 6) {
+        const m = tune.melody, i = this.step % m.length;
+        for (let k = 0; k < 3; k++) this.note(m[(i + k * 2) % m.length] * 2, t + k * 0.07, 0.5, 'harp', 0.14);
+      }
       this.step += 1;
-      // after each full pass of a melody, drift to the next tune for variety
-      if (this.step % tune.melody.length === 0) this.tuneIdx = (this.tuneIdx + 1) % this.tunes.length;
+      // let each tune breathe for two full passes before drifting to the next
+      if (this.step % (tune.melody.length * 2) === 0) this.tuneIdx = (this.tuneIdx + 1) % this.tunes.length;
       this.timer = setTimeout(() => this.tick(), beat * 1000);
     },
-    note(freq, t, dur, type, g) {
+    note(freq, t, dur, instr, g) {
       const c = ctx(); const o = c.createOscillator(), ga = c.createGain();
-      o.type = type; o.frequency.value = freq; o.connect(ga); ga.connect(this.master);
-      ga.gain.setValueAtTime(0, t); ga.gain.linearRampToValueAtTime(g, t + 0.02);
+      const w = this.waves && this.waves[instr];
+      if (w) o.setPeriodicWave(w); else o.type = instr; // 'sine' / 'triangle' fall through
+      o.frequency.value = freq; o.connect(ga); ga.connect(this.master);
+      // plucked instruments get a near-instant attack; pads a touch softer
+      const atk = (instr === 'sine' || instr === 'triangle') ? 0.02 : 0.005;
+      ga.gain.setValueAtTime(0, t); ga.gain.linearRampToValueAtTime(g, t + atk);
       ga.gain.exponentialRampToValueAtTime(0.001, t + dur);
       o.start(t); o.stop(t + dur + 0.03);
     },
