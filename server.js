@@ -178,8 +178,11 @@ server
     console.log(`Babble running on http://${HOST}:${PORT}`);
     console.log(`TTS backend: ${tts}`);
     if (tts === 'none') {
-      console.warn('  ⚠ No speech engine found. Install espeak-ng (e.g. `sudo apt install espeak-ng`)');
-      console.warn('    or run on macOS, otherwise words will be silent.');
+      console.warn('  ⚠ No speech engine found — words will be silent. Options:');
+      console.warn('    • piper (neural, natural): set PIPER_MODEL=/path/voice.onnx (+ PIPER_BIN)');
+      console.warn('    • espeak-ng (robotic): sudo apt install espeak-ng');
+      console.warn('    • macOS: the built-in `say` is used automatically');
+      console.warn('    Force one with BABBLE_TTS=piper|say|espeak.');
     }
   })
   .on('error', (err) => {

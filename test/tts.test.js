@@ -1,7 +1,7 @@
 'use strict';
 // Checks the phoneme->espeak mapping and that synthesis yields real WAV bytes.
 const assert = require('assert');
-const { phonemesToEspeak, phonemesToSaySpelling, synthPhonemes } = require('../src/tts');
+const { phonemesToSpelling, synthPhonemes } = require('../src/tts');
 
 // Peak |sample| of a 16-bit PCM WAV (walks chunks to find `data`).
 function peakAmplitude(wav) {
@@ -27,14 +27,13 @@ function peakAmplitude(wav) {
   const ok = (name, cond) => { assert.ok(cond, name); console.log('  ✓ ' + name); passed++; };
 
   console.log('tts:');
-  ok('maps phonemes to stressed Kirshenbaum (espeak)',
-    phonemesToEspeak(['b', 'a', 'b', 'a']) === "[[b'AbA]]");
-  ok('stress lands on first vowel only (espeak)',
-    phonemesToEspeak(['s', 't', 'i']) === "[[st'i]]");
-  ok('maps phonemes to a readable spelling (say)',
-    phonemesToSaySpelling(['b', 'a', 'b', 'a']) === 'bahbah');
-  ok('breaks vowel runs into syllables (say)',
-    phonemesToSaySpelling(['m', 'o', 'a', 'p', 'u']) === 'moh-ahpoo');
+  ok('maps phonemes to a readable spelling',
+    phonemesToSpelling(['b', 'a', 'b', 'a']) === 'bahbah');
+  ok('breaks vowel runs into syllables',
+    phonemesToSpelling(['m', 'o', 'a', 'p', 'u']) === 'moh-ahpoo');
+  // a long word that espeak's phoneme mode used to render as near-silence
+  ok('handles long all-"ah" words',
+    phonemesToSpelling(['m', 'a', 'h', 'a', 'k', 'e']).startsWith('mahhahkeh'));
 
   const wav = await synthPhonemes(['b', 'a', 'b', 'a']);
   ok('synthesis returns a Buffer', Buffer.isBuffer(wav));

@@ -1,19 +1,24 @@
 /**
  * tts.js — server-side speech synthesis.
  *
- * Every sound in Babble is a phoneme sequence, so we drive the synthesizer with
- * phoneme input rather than letters. That gives clear, *consistent*
- * pronunciation: the exact phonemes we score against are the exact phonemes you
- * hear — for the target word and for every guess.
+ * Every word in Babble is a phoneme sequence; we render it to a readable
+ * spelling (see phonemesToSpelling) and let a speech engine pronounce it. The
+ * same spelling always renders the same way for the target and every guess, so
+ * scoring stays fair, and rendering on the server means the round payload
+ * carries only audio — never the answer's phonemes.
  *
- * Rendering on the server (not the browser) also means the round payload carries
- * only audio, never the answer's phonemes, so the word can't be sniffed off the
- * wire during play.
+ * The backend is configurable via env vars:
  *
- * Backends, in order of preference:
- *   1. macOS `say`  — high-quality system voices, Apple phoneme input.
- *   2. `espeak-ng`  — cross-platform, Kirshenbaum phoneme input.
- * A backend is detected once at startup.
+ *   BABBLE_TTS = auto (default) | piper | say | espeak
+ *   PIPER_BIN    path to the piper binary           (default: "piper" on PATH)
+ *   PIPER_MODEL  path to a piper .onnx voice model   (required to use piper)
+ *   PIPER_SPEAKER  speaker id for multi-speaker models (optional)
+ *
+ * "auto" prefers the most natural engine available:
+ *   1. piper    — neural, natural-sounding (needs a voice model)
+ *   2. say      — macOS system voices
+ *   3. espeak-ng — clear but robotic; works anywhere
+ * A backend is resolved once and cached.
  */
 
 'use strict';
@@ -21,15 +26,24 @@
 const os = require('os');
 const path = require('path');
 const fs = require('fs/promises');
+const fss = require('fs');
 const crypto = require('crypto');
-const { execFile, execFileSync } = require('child_process');
+const { execFile, execFileSync, spawn } = require('child_process');
 
-// --- phoneme symbol maps -----------------------------------------------------
-// our internal phoneme -> English-ish spelling that `say` reads naturally as a
-// pseudo-word. (macOS `say` ignores the `[[inpt PHON]]` phoneme command, but it
-// pronounces ordinary text beautifully — so we hand it a readable spelling and
-// let a real voice say it. Gibberish then sounds like a plausible foreign word.)
-const SAY_SPELL = {
+// --- configuration -----------------------------------------------------------
+const TTS_PREF = (process.env.BABBLE_TTS || 'auto').toLowerCase();
+const PIPER_BIN = process.env.PIPER_BIN || 'piper';
+const PIPER_MODEL = process.env.PIPER_MODEL || '';
+const PIPER_SPEAKER = process.env.PIPER_SPEAKER || '';
+
+// --- phoneme -> readable spelling --------------------------------------------
+// Both backends are driven by an English-ish spelling read as a pseudo-word,
+// NOT by raw phoneme codes. macOS `say` ignores its `[[inpt PHON]]` command, and
+// espeak-ng's Kirshenbaum `[[ ]]` mode silently drops some vowel sequences
+// (e.g. "banana" came out as silence) — but both pronounce ordinary letters
+// reliably and well. So we hand them a spelling and let the voice say it; the
+// same word always renders the same way for the target and every guess.
+const SPELL = {
   p: 'p', b: 'b', t: 't', d: 'd', k: 'k', g: 'g',
   ch: 'ch', j: 'j',
   f: 'f', v: 'v', th: 'th', dh: 'th', s: 's', z: 'z', sh: 'sh', zh: 'zh', h: 'h',
@@ -37,82 +51,96 @@ const SAY_SPELL = {
   l: 'l', r: 'r', w: 'w', y: 'y',
   a: 'ah', e: 'eh', i: 'ee', o: 'oh', u: 'oo', ə: 'uh',
 };
-// our internal phoneme -> Kirshenbaum (espeak-ng `[[ ]]`)
-const KIRS = {
-  p: 'p', b: 'b', t: 't', d: 'd', k: 'k', g: 'g',
-  ch: 'tS', j: 'dZ',
-  f: 'f', v: 'v', th: 'T', dh: 'D', s: 's', z: 'z', sh: 'S', zh: 'Z', h: 'h',
-  m: 'm', n: 'n', ng: 'N',
-  l: 'l', r: 'r', w: 'w', y: 'j',
-  a: 'A', e: 'E', i: 'i', o: 'O', u: 'u', ə: '@',
-};
 const VOWELS = new Set(['a', 'e', 'i', 'o', 'u', 'ə']);
 
 /**
- * Spelling for `say`, e.g. [b,a,b,a] -> "bah-bah".
- * Hyphens between syllables keep adjacent vowels from merging into one diphthong
+ * Spelling for the synthesizer, e.g. [b,a,b,a] -> "bahbah", [m,o,a,p,u] -> "moh-ahpoo".
+ * Hyphens between adjacent vowels keep a run from merging into one diphthong
  * (so [a,i] reads "ah-ee", not "ahee") and give the voice clean syllable breaks.
  */
-function phonemesToSaySpelling(phonemes) {
+function phonemesToSpelling(phonemes) {
   let out = '';
   let prevVowel = false;
   for (const p of phonemes) {
     const isVowel = VOWELS.has(p);
     if (isVowel && prevVowel) out += '-'; // break vowel runs into syllables
-    out += SAY_SPELL[p] || '';
+    out += SPELL[p] || '';
     prevVowel = isVowel;
   }
   return out;
 }
 
-/** espeak Kirshenbaum string, e.g. [b,a,b,a] -> "[[b'AbA]]". */
-function phonemesToEspeak(phonemes) {
-  const firstVowel = phonemes.findIndex((p) => VOWELS.has(p));
-  let body = '';
-  phonemes.forEach((p, i) => {
-    if (i === firstVowel) body += "'";
-    body += KIRS[p] || '';
-  });
-  return '[[' + body + ']]';
-}
-
 // --- backend detection -------------------------------------------------------
 function has(cmd) {
+  // absolute/relative path: check it exists & is executable; bare name: search PATH
+  if (cmd.includes('/')) {
+    try { fss.accessSync(cmd, fss.constants.X_OK); return true; } catch (_) { return false; }
+  }
   try { execFileSync('which', [cmd], { stdio: 'ignore' }); return true; }
   catch (_) { return false; }
 }
+const piperReady = () => !!PIPER_MODEL && fss.existsSync(PIPER_MODEL) && has(PIPER_BIN);
+const espeakBin = () => (has('espeak-ng') ? 'espeak-ng' : has('espeak') ? 'espeak' : null);
 
-let BACKEND = null; // 'say' | 'espeak' | 'none'
+let BACKEND = null; // 'piper' | 'say' | 'espeak' | 'none'
 function backend() {
   if (BACKEND) return BACKEND;
-  if (process.platform === 'darwin' && has('say')) BACKEND = 'say';
-  else if (has('espeak-ng')) BACKEND = 'espeak';
-  else if (has('espeak')) BACKEND = 'espeak';
-  else BACKEND = 'none';
+  const pick = {
+    piper: () => (piperReady() ? 'piper' : 'none'),
+    say: () => (has('say') ? 'say' : 'none'),
+    espeak: () => (espeakBin() ? 'espeak' : 'none'),
+    auto: () =>
+      piperReady() ? 'piper'
+      : process.platform === 'darwin' && has('say') ? 'say'
+      : espeakBin() ? 'espeak'
+      : 'none',
+  };
+  BACKEND = (pick[TTS_PREF] || pick.auto)();
   return BACKEND;
 }
 
 function backendName() {
   const b = backend();
-  return b === 'say' ? 'macOS say' : b === 'espeak' ? 'espeak-ng' : 'none';
+  if (b === 'piper') return `piper (${path.basename(PIPER_MODEL).replace(/\.onnx$/, '')})`;
+  if (b === 'say') return 'macOS say';
+  if (b === 'espeak') return 'espeak-ng';
+  return 'none';
 }
 
 // --- rendering ---------------------------------------------------------------
 function run(cmd, args) {
   return new Promise((resolve, reject) => {
-    execFile(cmd, args, { timeout: 8000 }, (err) => (err ? reject(err) : resolve()));
+    execFile(cmd, args, { timeout: 15000 }, (err) => (err ? reject(err) : resolve()));
+  });
+}
+// run a command, feeding `input` on stdin (piper reads its text from stdin)
+function runStdin(cmd, args, input) {
+  return new Promise((resolve, reject) => {
+    const p = spawn(cmd, args, { timeout: 15000 });
+    let err = '';
+    p.stderr.on('data', (d) => (err += d));
+    p.on('error', reject);
+    p.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`${cmd} exited ${code}: ${err.slice(0, 200)}`))));
+    p.stdin.on('error', () => {}); // ignore EPIPE if the child dies early
+    p.stdin.end(input);
   });
 }
 
 async function renderToFile(phonemes, wpm) {
   const tmp = path.join(os.tmpdir(), `babble-${crypto.randomBytes(6).toString('hex')}.wav`);
   const b = backend();
-  if (b === 'say') {
-    const text = phonemesToSaySpelling(phonemes);
+  const text = phonemesToSpelling(phonemes);
+  if (b === 'piper') {
+    // piper has no wpm; length-scale stretches phonemes (1 = normal, >1 = slower)
+    const lengthScale = (150 / wpm).toFixed(2);
+    const args = ['-m', PIPER_MODEL, '-f', tmp, '--length-scale', lengthScale, '--sentence-silence', '0'];
+    if (PIPER_SPEAKER) args.push('-s', PIPER_SPEAKER);
+    await runStdin(PIPER_BIN, args, text);
+  } else if (b === 'say') {
     await run('say', ['-o', tmp, '--data-format=LEI16@22050', '-r', String(wpm), text]);
   } else if (b === 'espeak') {
-    const espeakBin = has('espeak-ng') ? 'espeak-ng' : 'espeak';
-    await run(espeakBin, ['-w', tmp, '-s', String(wpm), '-p', '42', phonemesToEspeak(phonemes)]);
+    // espeak speed is words/min; bias a touch slower for clarity.
+    await run(espeakBin(), ['-w', tmp, '-s', String(wpm), '-p', '42', text]);
   } else {
     throw new Error('no TTS backend');
   }
@@ -152,8 +180,7 @@ async function synthPhonemesB64(phonemes, opts) {
 }
 
 module.exports = {
-  phonemesToSaySpelling,
-  phonemesToEspeak,
+  phonemesToSpelling,
   synthPhonemes,
   synthPhonemesB64,
   backend,

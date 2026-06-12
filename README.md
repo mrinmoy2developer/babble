@@ -48,22 +48,44 @@ Open the URL in two tabs (or share `http://<your-ip>:3000` on your LAN). One
 player **Creates a room** and shares the 4‑letter code; others **Join**. The
 host tweaks settings and hits **Start**.
 
-### Audio
+### Audio / voices
 
-Speech is synthesized **on the server** from phonemes and streamed to players as
-WAV, so everyone hears the same thing and the browser only has to play it:
+Speech is synthesized **on the server** and streamed to players as WAV, so
+everyone hears the same thing and the browser only has to play it. The backend
+is **configurable** via `BABBLE_TTS` and resolved once at boot (the server logs
+which one it picked). No API keys, fully offline.
 
-- **macOS:** uses the built-in `say` engine (good-quality system voices) — works
-  out of the box, nothing to install.
-- **Linux / other:** install **espeak-ng** (`apt install espeak-ng` /
-  `brew install espeak-ng`) and the server will use it automatically.
+| Backend | Sound | Setup |
+|---|---|---|
+| **piper** | 🟢 neural, natural | install piper + a voice model (below) — **recommended** |
+| **say** | 🟡 decent | built into macOS, used automatically there |
+| **espeak-ng** | 🟠 clear but robotic | `apt install espeak-ng` / `brew install espeak-ng` |
 
-On boot the server prints which backend it found. No API keys, fully offline.
-The synthesizer is driven by **phonemes**, not letters, so pronunciation is
-clear and identical for the target word and every guess — which is exactly what
-makes scoring fair. It's articulate rather than Hollywood-natural; for a
-"spell-the-sound" game that accuracy is the point (and gibberish has no natural
-reading anyway).
+Default is `auto`: **piper → say → espeak**, whichever is available. Force one
+with `BABBLE_TTS=piper|say|espeak`.
+
+**Using Piper (the natural one):**
+
+```bash
+# 1. install piper + download a voice (medium = natural, ~60 MB)
+python3 -m venv ~/piper && ~/piper/bin/pip install piper-tts
+mkdir -p ~/piper-voices && cd ~/piper-voices
+~/piper/bin/python -m piper.download_voices en_US-amy-medium   # browse names with: ... download_voices
+
+# 2. point Babble at it
+export BABBLE_TTS=piper
+export PIPER_BIN=~/piper/bin/piper
+export PIPER_MODEL=~/piper-voices/en_US-amy-medium.onnx
+npm start            # boot log should read: TTS backend: piper (en_US-amy-medium)
+```
+
+In production set those three as `Environment=` lines in `deploy/babble.service`.
+Swap the voice by downloading another model (e.g. `en_GB-cori-high`,
+`en_US-lessac-medium`) and changing `PIPER_MODEL`.
+
+Whichever backend, the synthesizer is driven by a **consistent spelling** of each
+word's phonemes, so the target and every guess always render the same way — which
+is what keeps scoring fair.
 
 ## Deploying to production
 
