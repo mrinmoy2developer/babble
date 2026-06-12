@@ -1,7 +1,11 @@
-# 🗣️ Babble
+<p align="center">
+  <img src="assets/banner.svg" alt="Babble — hear a word in a strange tongue, spell it, closest sound wins" width="100%">
+</p>
 
-An online multiplayer browser game in the spirit of *skribbl.io* and *Garlic Phone* —
-but the medium is **sound**, not drawing.
+<p align="center">
+  An online multiplayer browser game in the spirit of <i>skribbl.io</i> and <i>Garlic Phone</i> —
+  but the medium is <b>sound</b>, not drawing.
+</p>
 
 An automated engine picks a random word (from a real-ish language pack or pure
 **gibberish**). Everyone **hears** it spoken aloud and can replay it as many times
@@ -10,9 +14,22 @@ as they like. You then **spell what you heard** in a common answer language
 decoder** and scores each player by how close their guess *sounds* to the
 original. Closest sound wins.
 
-```
-engine → phonemes → 🔊 you hear it → ✍️ you spell it → 🔊 decoded → 📏 compared → 🏆
-```
+<p align="center"><img src="assets/gameplay.svg" alt="Hear → Spell → Compare → Win" width="92%"></p>
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/1-intro.png" alt="Intro splash"><br><sub><b>Animated intro</b> — wordart logo and the hear → spell → compare → win flow.</sub></td>
+    <td width="50%"><img src="assets/screenshots/2-lobby.png" alt="Lobby"><br><sub><b>Lobby</b> — pick from 19 word-source packs, public/private, preview toggle, round &amp; timing.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/3-play.png" alt="Play screen"><br><sub><b>Play</b> — replay the word, then stack your tries and compare each one's waveform to the original before submitting.</sub></td>
+    <td width="50%"><img src="assets/screenshots/4-reveal.png" alt="Reveal screen"><br><sub><b>Reveal</b> — every guess is pronounced &amp; scored; each waveform is overlaid on the original so you can <i>see</i> how close it sounded.</sub></td>
+  </tr>
+</table>
+
+<p align="center"><img src="assets/screenshots/5-gameover.png" alt="Game over with confetti" width="60%"><br><sub><b>Final standings</b> — confetti + a victory fanfare.</sub></p>
 
 ## Quick start
 
@@ -67,6 +84,8 @@ sound" means:
 Because it scores *sound*, `banana`, `bananna`, and `bunana` all score near the
 top — the letters differ but the pronunciation barely does.
 
+<p align="center"><img src="assets/scoring.svg" alt="Scored by sound, not spelling" width="92%"></p>
+
 At the **reveal** you get the whole picture: every player's guess in text, a
 ▶ button to **play each guess** (rendered from the exact phonemes it was scored
 on), and a **waveform** of each guess overlaid on the original so you can *see*
@@ -96,7 +115,9 @@ the target phonemes until the reveal.
 
 All sound effects are synthesized in the browser (Web Audio) — no asset files.
 
-## Project layout
+## Architecture
+
+<p align="center"><img src="assets/architecture.svg" alt="Architecture diagram" width="100%"></p>
 
 ```
 server.js              Express static host + Socket.IO transport (thin)
@@ -105,7 +126,8 @@ src/tts.js             server-side speech synth (macOS say / espeak-ng)
 src/words.js           the automated word/gibberish generator
 src/game.js            Room + round state machine (lobby → rounds → results)
 public/                index.html · style.css · client.js (Web Audio playback + waveforms)
-test/                  phonetics.test.js · tts.test.js (unit) · integration.test.js (e2e)
+assets/                README graphics (make-graphics.js) + screenshots (screenshot.js)
+test/                  phonetics · tts · game (unit) · integration · features (e2e)
 ```
 
 ## Tests
@@ -123,6 +145,18 @@ npm run test:e2e    # boots a server: full round + pause/resume/lock/next/public
   `DECODERS` in `src/phonetics.js`, plus an `<option>` in `index.html`.
 - **Real (non-gibberish) words:** feed real phoneme transcriptions into a pack's
   generator instead of synthesizing syllables.
+
+## Regenerating the README art
+
+The diagrams are authored SVGs; the screenshots are captured from a real game.
+
+```bash
+node assets/make-graphics.js     # banner, gameplay, architecture, scoring, reveal SVGs
+
+# real screenshots (one-time browser install, ~90 MB):
+npm i -D playwright && npx playwright install chromium
+node assets/screenshot.js        # → assets/screenshots/*.png
+```
 
 ## Ideas / roadmap
 

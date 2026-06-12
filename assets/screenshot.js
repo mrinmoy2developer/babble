@@ -32,25 +32,35 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   await wait(900);
 
   const browser = await chromium.launch();
-  const viewport = { width: 900, height: 820 };
-  const host = await browser.newContext({ viewport });
-  const guest = await browser.newContext({ viewport });
+  const viewport = { width: 920, height: 860 };
+  const host = await browser.newContext({ viewport, deviceScaleFactor: 2 });
+  const guest = await browser.newContext({ viewport, deviceScaleFactor: 2 });
   const hp = await host.newPage();
   const gp = await guest.newPage();
 
-  const shot = (page, name) => page.screenshot({ path: path.join(OUT, name + '.png') });
+  const shot = (page, name, full = true) => page.screenshot({ path: path.join(OUT, name + '.png'), fullPage: full });
+  // set a range slider and fire the events the UI listens for
+  const setRange = (page, id, val) => page.$eval(`#${id}`, (el, v) => {
+    el.value = String(v); el.dispatchEvent(new Event('input', { bubbles: true }));
+  }, val);
 
   await hp.goto(URL);
   await hp.waitForSelector('#btn-enter');
-  await wait(1600); // let the intro animation settle
-  await shot(hp, '1-intro');
+  await wait(1700); // let the intro animation settle
+  await shot(hp, '1-intro', false);
 
   await hp.click('#btn-enter');
   await hp.fill('#name-input', 'Ada');
   await hp.click('#btn-create');
   await hp.waitForSelector('#screen-lobby.active');
-  // make it a quick 1-round game with a generous play window for the shot
-  await hp.fill('#name-input', 'Ada');
+
+  // make it a single short round so we reach every screen quickly
+  await setRange(hp, 'rounds', 1);
+  await setRange(hp, 'secs', 60);
+  // pick a few colourful packs for the lobby shot
+  for (const k of ['japanesque', 'elvish', 'polynesian']) {
+    await hp.check(`#src-${k}`).catch(() => {});
+  }
   await wait(400);
   await shot(hp, '2-lobby');
 
@@ -66,22 +76,26 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   await hp.click('#btn-start');
   await hp.waitForSelector('#screen-play.active');
   await hp.fill('#guess-input', 'krindel');
-  await hp.click('#btn-hear-self'); // stack a preview try
-  await wait(800);
+  await hp.click('#btn-hear-self'); // stack a preview try with its waveform
+  await wait(1000);
   await shot(hp, '3-play');
 
   await gp.waitForSelector('#screen-play.active');
   await gp.fill('#guess-input', 'grindle');
+  await gp.click('#btn-hear-self');
+  await wait(400);
   await gp.click('#guess-form button[type=submit]');
   await hp.click('#guess-form button[type=submit]');
 
   await hp.waitForSelector('#screen-reveal.active');
-  await wait(900); // let waveforms draw
+  await wait(1100); // let waveforms draw
   await shot(hp, '4-reveal');
 
-  await hp.waitForSelector('#screen-over.active', { timeout: 30000 });
-  await wait(700);
-  await shot(hp, '5-gameover');
+  // skip the countdown straight to the final standings
+  await hp.click('#btn-next-round');
+  await hp.waitForSelector('#screen-over.active', { timeout: 10000 });
+  await wait(900); // confetti + standings
+  await shot(hp, '5-gameover', false);
 
   await browser.close();
   server.kill();
