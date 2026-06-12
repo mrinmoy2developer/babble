@@ -138,13 +138,23 @@
     <section id="screen-lobby" class="screen card">
       <div class="lobby-head">
         <h2>Lobby</h2>
-        <div class="roomcode">Room <span id="room-code">----</span></div>
+        <div class="roomcode">Room <span id="room-code">----</span>
+          <button id="btn-invite" class="ghost small" title="Copy invite link">🔗 Invite</button>
+        </div>
       </div>
 
       <div class="lobby-grid">
-        <div>
+        <div class="lobby-left">
           <h3>Players</h3>
           <ul id="player-list" class="players"></ul>
+          <div class="chat lobby-chat">
+            <h3>💬 Chat</h3>
+            <ul id="lobby-chat-list" class="chat-list"></ul>
+            <form id="lobby-chat-form" class="chat-form">
+              <input id="lobby-chat-input" maxlength="200" placeholder="say hi…" autocomplete="off" />
+              <button type="submit" class="primary">Send</button>
+            </form>
+          </div>
         </div>
 
         <div id="settings" class="settings simple">
@@ -278,6 +288,19 @@
 
   <!-- transient notifications (who locked in, etc.) -->
   <div id="toasts" class="toasts"></div>
+
+  <!-- floating in-game chat (play/reveal/over screens) -->
+  <div id="chat-widget" class="chat-widget">
+    <div id="chat-panel" class="chat-panel" hidden>
+      <div class="chat-panel-head">💬 Chat <button id="chat-close" title="Close">✕</button></div>
+      <ul id="float-chat-list" class="chat-list"></ul>
+      <form id="float-chat-form" class="chat-form">
+        <input id="float-chat-input" maxlength="200" placeholder="message…" autocomplete="off" />
+        <button type="submit" class="primary">Send</button>
+      </form>
+    </div>
+    <button id="chat-toggle" class="chat-toggle" title="Chat">💬<span id="chat-unread" class="chat-unread" hidden>0</span></button>
+  </div>
 
   <!-- paused overlay -->
   <div id="paused-overlay" class="overlay">

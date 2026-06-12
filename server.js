@@ -91,6 +91,21 @@ io.on('connection', (socket) => {
     }
   });
 
+  // in-game chat — relayed to everyone in the room
+  let lastChat = 0;
+  socket.on('chat:send', ({ text }) => {
+    const room = currentRoom(socket);
+    if (!room) return;
+    const p = room.players.get(socket.id);
+    if (!p) return;
+    const now = Date.now();
+    if (now - lastChat < 350) return; // light anti-spam throttle
+    lastChat = now;
+    const clean = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    if (!clean) return;
+    io.to(room.code).emit('chat:msg', { id: socket.id, name: p.name, avatar: p.avatar, text: clean });
+  });
+
   socket.on('game:start', () => {
     const room = currentRoom(socket);
     if (room && room.start(socket.id)) { stats.addGame(); broadcastStats(); }
@@ -156,6 +171,7 @@ function joinRoom(socket, room, name, avatar) {
   const player = room.addPlayer(socket.id, name, avatar);
   socket.emit('room:joined', { you: player.id, ...room.publicState() });
   broadcastLobby(room);
+  io.to(room.code).emit('chat:msg', { system: true, text: `${player.name} joined` });
 }
 
 function leaveRoom(socket) {
@@ -165,12 +181,14 @@ function leaveRoom(socket) {
   where.delete(socket.id);
   socket.leave(code);
   if (!room) return;
+  const left = room.players.get(socket.id);
   room.removePlayer(socket.id);
   if (room.isEmpty()) {
     room.dispose();
     rooms.delete(code);
   } else {
     broadcastLobby(room);
+    io.to(room.code).emit('chat:msg', { system: true, text: `${left ? left.name : 'A player'} left` });
   }
 }
 

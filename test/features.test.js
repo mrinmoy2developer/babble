@@ -46,6 +46,13 @@ const assert = (name, cond) => {
   // counters
   let roundStarts = 0;
   guest.on('round:start', () => { roundStarts++; });
+
+  // chat relay (sender's name + avatar reach the room)
+  const chatP = once(host, 'chat:msg');
+  guest.emit('chat:send', { text: 'gl hf!' });
+  const chat = await Promise.race([chatP, wait(1000)]);
+  assert('chat message relays to the room', chat && chat.text === 'gl hf!' && chat.name === 'Bjarne');
+
   let lockSeen = null;
   host.on('guess:locked', (d) => { if (d.id !== host.id) lockSeen = d; });
   const pausedP = once(guest, 'game:paused');

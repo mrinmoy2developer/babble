@@ -17,6 +17,9 @@
     screens[name].classList.add('active');
     $('hud').classList.toggle('on', name === 'play' || name === 'reveal');
     if (name !== 'play') $('paused-overlay').classList.remove('on');
+    const inGame = ['play', 'reveal', 'over'].includes(name);
+    $('chat-widget').classList.toggle('on', inGame);
+    if (!inGame) $('chat-panel').hidden = true;
     syncHostControls();
   }
 
@@ -266,6 +269,8 @@
     const intro = $('intro');
     intro.classList.add('fade-out');
     setTimeout(() => intro.classList.remove('on', 'fade-out'), 500);
+    // arrived via an invite link with a name already set? jump straight in.
+    if (inviteCode && me.name) joinByCode(inviteCode);
   };
 
   const LOAD_MSGS = [
@@ -277,6 +282,57 @@
     $('loading').classList.add('on');
   }
   function hideLoading() { $('loading').classList.remove('on'); }
+
+  // ----- chat (lobby panel + floating in-game widget share one log) --------
+  const chatLog = [];
+  let chatUnread = 0;
+  function chatEl(m) {
+    const li = document.createElement('li');
+    if (m.system) { li.className = 'c-sys'; li.textContent = m.text; }
+    else li.innerHTML = `${avatarSpan(m.avatar)} <span class="c-name">${escapeHtml(m.name)}</span>: ${escapeHtml(m.text)}`;
+    return li;
+  }
+  function addChat(m) {
+    chatLog.push(m); if (chatLog.length > 120) chatLog.shift();
+    ['lobby-chat-list', 'float-chat-list'].forEach((id) => {
+      const list = $(id); if (!list) return;
+      list.appendChild(chatEl(m));
+      while (list.children.length > 120) list.removeChild(list.firstChild);
+      list.scrollTop = list.scrollHeight;
+    });
+    if (['play', 'reveal', 'over'].includes(activeName()) && $('chat-panel').hidden && !m.system) {
+      chatUnread += 1;
+      const u = $('chat-unread'); u.hidden = false; u.textContent = chatUnread > 9 ? '9+' : chatUnread;
+      sfx.blip(720, 0.05);
+    }
+  }
+  socket.on('chat:msg', addChat);
+  function sendChat(input) {
+    const t = input.value.trim(); if (!t) return;
+    socket.emit('chat:send', { text: t }); input.value = '';
+  }
+  $('lobby-chat-form').addEventListener('submit', (e) => { e.preventDefault(); sendChat($('lobby-chat-input')); });
+  $('float-chat-form').addEventListener('submit', (e) => { e.preventDefault(); sendChat($('float-chat-input')); });
+  $('chat-toggle').onclick = () => {
+    const panel = $('chat-panel');
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) {
+      chatUnread = 0; $('chat-unread').hidden = true;
+      $('float-chat-list').scrollTop = $('float-chat-list').scrollHeight;
+      $('float-chat-input').focus();
+    }
+  };
+  $('chat-close').onclick = () => { $('chat-panel').hidden = true; };
+
+  // ----- invite link + deep-link join -------------------------------------
+  $('btn-invite').onclick = async () => {
+    const code = (state && state.code) || $('room-code').textContent.trim();
+    const link = `${location.origin}${location.pathname}?room=${encodeURIComponent(code)}`;
+    try { await navigator.clipboard.writeText(link); toast('🔗 Invite link copied — share it!'); }
+    catch (_) { window.prompt('Copy this invite link:', link); }
+  };
+  const inviteCode = (new URLSearchParams(location.search).get('room') || '').toUpperCase().slice(0, 4);
+  if (inviteCode) $('code-input').value = inviteCode;
 
   // ----- join screen + public lobbies -------------------------------------
   function nameVal() {

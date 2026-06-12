@@ -203,6 +203,9 @@ visibility and the preview toggle.
 - **Avatars & flags:** pick a cartoon avatar (shown beside your name everywhere);
   each word-source pack has a small round flag. While a guess/word is still being
   synthesized, a 👶 scratches its head.
+- **Chat & invites:** a lobby chat plus a floating in-game chat widget (with unread
+  badge), and a **🔗 Invite** button that copies a deep link (`?room=CODE`) friends
+  can click to drop straight into your lobby.
 - **Mixed scripts:** the "Mixed" answer language scores guesses that blend Bengali
   and English (e.g. `বাট ball`), decoding each script run with its own rules.
 
