@@ -7,6 +7,10 @@
   but the medium is <b>sound</b>, not drawing.
 </p>
 
+<p align="center">
+  <a href="https://babble.hebdo.duckdns.org"><b>▶ Play the live demo — babble.hebdo.duckdns.org</b></a>
+</p>
+
 An automated engine picks a random word (from a real-ish language pack or pure
 **gibberish**). Everyone **hears** it spoken aloud and can replay it as many times
 as they like. You then **spell what you heard** in a common answer language
@@ -32,6 +36,8 @@ original. Closest sound wins.
 <p align="center"><img src="assets/screenshots/5-gameover.png" alt="Game over with confetti" width="60%"><br><sub><b>Final standings</b> — confetti + a victory fanfare.</sub></p>
 
 ## Quick start
+
+> 🌐 **Live demo:** [babble.hebdo.duckdns.org](https://babble.hebdo.duckdns.org) — grab a friend (or open two tabs) and play.
 
 ```bash
 npm install
