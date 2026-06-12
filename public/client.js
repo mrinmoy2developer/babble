@@ -270,12 +270,15 @@
     { c: '#ffd24d', g: '你好字文中語' },         // chinese
     { c: '#b491ff', g: 'कखगअआइउ' },           // devanagari
   ];
+  const FONT_PRE = '700 ', FONT_POST = 'px "Fredoka", system-ui, "Noto Sans", sans-serif';
   const bgLetters = {
     running: false, raf: null, trains: [], W: 0, H: 0, dpr: 1, canvas: null, g: null,
+    last: 0, _tick: null,
     init() {
       this.canvas = $('bg-letters');
       if (!this.canvas) return;
       this.g = this.canvas.getContext('2d');
+      this._tick = () => this.frame();
       this.resize();
       window.addEventListener('resize', () => this.resize());
     },
@@ -318,11 +321,15 @@
         if (d < R) { const f = 1 - d / R; n.x += (dx / d) * f * 70 * this.dpr; n.y += (dy / d) * f * 70 * this.dpr; n.pop = Math.max(n.pop, f); }
       }
     },
-    start() { if (this.running || !this.g) return; this.running = true; this.frame(); },
+    start() { if (this.running || !this.g) return; this.running = true; this.last = 0; this.raf = requestAnimationFrame(this._tick); },
     stop() { this.running = false; if (this.raf) cancelAnimationFrame(this.raf); if (this.g) this.g.clearRect(0, 0, this.W, this.H); },
     frame() {
       if (!this.running) return;
       const g = this.g; const t = performance.now();
+      // delta-time: scale all motion to a 60fps baseline so speed stays constant
+      // and frame-rate dips no longer make the letters stutter or jump.
+      const dt = this.last ? Math.min(3, Math.max(0.2, (t - this.last) / 16.667)) : 1;
+      this.last = t;
       g.clearRect(0, 0, this.W, this.H);
       // mother ducks bumping at crossings -> bounce apart + pop
       for (let i = 0; i < this.trains.length; i++) {
@@ -334,13 +341,14 @@
         }
       }
       g.textAlign = 'center'; g.textBaseline = 'middle';
+      let curFont = '', curFill = '';
       for (let idx = 0; idx < this.trains.length; idx++) {
         const tr = this.trains[idx];
-        tr.fade = Math.min(1, tr.fade + 0.01);
-        tr.a += Math.sin(t * 0.0006 + tr.phase) * 0.025 + (Math.random() - 0.5) * 0.02;
+        tr.fade = Math.min(1, tr.fade + 0.01 * dt);
+        tr.a += (Math.sin(t * 0.0006 + tr.phase) * 0.025 + (Math.random() - 0.5) * 0.02) * dt;
         const lead = tr.nodes[0];
-        lead.x += Math.cos(tr.a) * tr.speed;
-        lead.y += Math.sin(tr.a) * tr.speed;
+        lead.x += Math.cos(tr.a) * tr.speed * dt;
+        lead.y += Math.sin(tr.a) * tr.speed * dt;
         // ducklings: each follows the one ahead at a fixed distance
         for (let k = 1; k < tr.nodes.length; k++) {
           const a = tr.nodes[k - 1], b = tr.nodes[k];
@@ -352,31 +360,53 @@
         const s = tr.size;
         if (!tr.entered && tr.nodes.some((n) => n.x > -s && n.x < this.W + s && n.y > -s && n.y < this.H + s)) tr.entered = true;
         if (tr.entered && this.offscreen(tr)) { this.trains[idx] = this.makeTrain(idx); continue; }
+        // one fillStyle per train (colour is constant within a chain)
+        if (tr.color !== curFill) { g.fillStyle = tr.color; curFill = tr.color; }
         // draw tail -> head, each letter bouncing/popping like a little critter
         for (let k = tr.nodes.length - 1; k >= 0; k--) {
           const n = tr.nodes[k];
-          n.pop = Math.max(0, n.pop - 0.04);
-          if (Math.random() < 0.0007) n.pop = 1; // spontaneous pop
+          n.pop = Math.max(0, n.pop - 0.04 * dt);
+          if (Math.random() < 0.0007 * dt) n.pop = 1; // spontaneous pop
           const bob = Math.sin(t * 0.004 + n.bob) * 4 * this.dpr;
           const squash = 1 + Math.sin(t * 0.003 + n.bob) * 0.05; // gentle dribble
           const sc = (1 + n.pop * 0.7) * squash;
           g.globalAlpha = Math.max(0.12, (0.92 - k * 0.06) * tr.fade);
-          g.fillStyle = tr.color;
-          g.font = `700 ${tr.size * sc}px "Fredoka", system-ui, "Noto Sans", sans-serif`;
+          // round the px size so identical-size letters reuse one parsed font;
+          // setting ctx.font is costly, so only reassign when it actually changes.
+          const f = FONT_PRE + Math.round(tr.size * sc) + FONT_POST;
+          if (f !== curFont) { g.font = f; curFont = f; }
           g.fillText(tr.glyphs[k % tr.glyphs.length], n.x, n.y + bob);
         }
       }
       g.globalAlpha = 1;
-      this.raf = requestAnimationFrame(() => this.frame());
+      this.raf = requestAnimationFrame(this._tick);
     },
   };
 
   // ----- playful background melody (synthesised, toggleable) ---------------
   const music = {
     on: localStorage.getItem('babble.music') !== 'off',
-    playing: false, timer: null, step: 0, master: null,
-    melody: [523.25, 659.25, 783.99, 880, 783.99, 659.25, 587.33, 659.25, 523.25, 659.25, 783.99, 1046.5],
-    bass: [130.81, 130.81, 174.61, 196.0],
+    playing: false, timer: null, step: 0, master: null, tuneIdx: 0,
+    // a handful of playful tunes in friendly keys; same triangle-lead / sine-bass
+    // timbre, so they share the game's feel but the loop never gets stale.
+    tunes: [
+      { // C major — the original, bright and bouncy
+        melody: [523.25, 659.25, 783.99, 880, 783.99, 659.25, 587.33, 659.25, 523.25, 659.25, 783.99, 1046.5],
+        bass: [130.81, 130.81, 174.61, 196.0],
+      },
+      { // A minor pentatonic — a touch wistful, hummable
+        melody: [440, 523.25, 587.33, 659.25, 783.99, 659.25, 587.33, 523.25, 440, 523.25, 659.25, 587.33],
+        bass: [110, 146.83, 164.81, 130.81],
+      },
+      { // G major — skippy and upbeat
+        melody: [392, 493.88, 587.33, 783.99, 659.25, 587.33, 493.88, 587.33, 392, 493.88, 587.33, 783.99],
+        bass: [98, 146.83, 164.81, 130.81],
+      },
+      { // F major — round and warm
+        melody: [349.23, 440, 523.25, 698.46, 523.25, 440, 392, 440, 349.23, 523.25, 698.46, 523.25],
+        bass: [87.31, 116.54, 130.81, 98],
+      },
+    ],
     start() {
       const c = ctx();
       if (!c || this.playing || !this.on) return;
@@ -388,9 +418,12 @@
     tick() {
       if (!this.playing) return;
       const c = ctx(); const t = c.currentTime; const beat = 0.32;
-      this.note(this.melody[this.step % this.melody.length], t, beat * 0.9, 'triangle', 0.5);
-      if (this.step % 2 === 0) this.note(this.bass[Math.floor(this.step / 2) % this.bass.length], t, beat * 1.7, 'sine', 0.55);
+      const tune = this.tunes[this.tuneIdx];
+      this.note(tune.melody[this.step % tune.melody.length], t, beat * 0.9, 'triangle', 0.5);
+      if (this.step % 2 === 0) this.note(tune.bass[Math.floor(this.step / 2) % tune.bass.length], t, beat * 1.7, 'sine', 0.55);
       this.step += 1;
+      // after each full pass of a melody, drift to the next tune for variety
+      if (this.step % tune.melody.length === 0) this.tuneIdx = (this.tuneIdx + 1) % this.tunes.length;
       this.timer = setTimeout(() => this.tick(), beat * 1000);
     },
     note(freq, t, dur, type, g) {
