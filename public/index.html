@@ -3,10 +3,53 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Babble — spell what you hear</title>
-  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <link rel="apple-touch-icon" href="favicon.svg" />
+  <title>Babble — Free Online Multiplayer Word-Sound Party Game</title>
+
+  <!-- SEO -->
+  <meta name="description" content="Babble is a free online multiplayer party game. Hear a word in a strange language or pure gibberish, spell what you heard, and the closest-sounding guess wins. Play with friends in your browser — no install, no signup." />
+  <meta name="keywords" content="babble, online multiplayer game, party game, word game, sound game, pronunciation game, skribbl alternative, garlic phone, free browser game, guess the word, play with friends" />
+  <meta name="author" content="Babble" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://babble.hebdo.duckdns.org/" />
   <meta name="theme-color" content="#0f1020" />
+
+  <!-- Open Graph (Facebook, Discord, WhatsApp, …) -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Babble" />
+  <meta property="og:url" content="https://babble.hebdo.duckdns.org/" />
+  <meta property="og:title" content="Babble — hear it, spell it, closest sound wins" />
+  <meta property="og:description" content="A free online multiplayer party game: hear a strange word, spell what you heard, and the closest-sounding guess wins. Plays in your browser." />
+  <meta property="og:image" content="https://babble.hebdo.duckdns.org/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Babble — hear it, spell it, closest sound wins" />
+  <meta name="twitter:description" content="A free online multiplayer party game: hear a strange word, spell what you heard, closest sound wins. Plays in your browser." />
+  <meta name="twitter:image" content="https://babble.hebdo.duckdns.org/og-image.png" />
+
+  <!-- structured data for rich search results -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "VideoGame",
+    "name": "Babble",
+    "url": "https://babble.hebdo.duckdns.org/",
+    "description": "A free online multiplayer party game: hear a word in a strange language or gibberish, spell what you heard, and the closest-sounding guess wins.",
+    "image": "https://babble.hebdo.duckdns.org/og-image.png",
+    "genre": ["Party", "Word", "Casual"],
+    "playMode": "MultiPlayer",
+    "applicationCategory": "Game",
+    "operatingSystem": "Any (web browser)",
+    "inLanguage": "en",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+  }
+  </script>
+
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="apple-touch-icon" href="icon-512.png" />
+  <link rel="manifest" href="/site.webmanifest" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
@@ -50,6 +93,13 @@
   </header>
 
   <main id="app">
+    <noscript>
+      <p style="text-align:center;color:#9aa0d0;max-width:640px;margin:20px auto">
+        <strong>Babble</strong> is a free online multiplayer party game — hear a word in a strange
+        language or pure gibberish, spell what you heard, and the closest-sounding guess wins.
+        Please enable JavaScript to play.
+      </p>
+    </noscript>
     <!-- JOIN -->
     <section id="screen-join" class="screen active card">
       <h2>Play</h2>

@@ -183,12 +183,47 @@ function revealMock() {
   return svg(w, h, body);
 }
 
+// ---- social share card (Open Graph image, 1200x630) -----------------------
+function ogCard() {
+  const w = 1200, h = 630;
+  const letters = [['B', C.accent], ['a', '#9b6bff'], ['b', '#6f7bff'], ['b', '#2aa8ff'], ['l', C.accent2], ['e', '#2fe0b8']];
+  // one centred <text> so proportional letter widths stay even; a dark copy behind = 3D
+  const tspans = letters.map(([ch, col]) => `<tspan fill="${col}">${ch}</tspan>`).join('');
+  const plain = letters.map(([ch]) => ch).join('');
+  const tAttrs = `font-size="118" font-weight="800" text-anchor="middle" letter-spacing="4"`;
+  const shadow = `<text x="601" y="239" ${tAttrs} fill="#0a0a18" opacity="0.7">🗣️ ${plain}</text>`;
+  const word = `<text x="600" y="234" ${tAttrs}>🗣️ ${tspans}</text>`;
+  const steps = [['🔊', 'hear'], ['✍️', 'spell'], ['〰️', 'compare'], ['🏆', 'win']];
+  let flow = '';
+  const fx0 = 250, fcw = 150, fgap = 30;
+  steps.forEach(([icon, lab], i) => {
+    const x = fx0 + i * (fcw + fgap);
+    flow += `<g transform="translate(${x},340)">
+      <rect width="${fcw}" height="120" rx="16" fill="${C.card}" stroke="${C.line}"/>
+      <text x="${fcw / 2}" y="62" font-size="42" text-anchor="middle">${icon}</text>
+      <text x="${fcw / 2}" y="98" font-size="20" fill="${C.muted}" text-anchor="middle">${lab}</text></g>`;
+    if (i < steps.length - 1) flow += `<text x="${x + fcw + fgap / 2}" y="412" font-size="30" fill="${C.accent}" text-anchor="middle">→</text>`;
+  });
+  const body = `
+    <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2d66"/><stop offset="0.65" stop-color="${C.bg}"/></linearGradient></defs>
+    <rect width="${w}" height="${h}" fill="url(#bg)"/>
+    ${bubbles(7, w, h, 16)}
+    ${shadow}${word}
+    <text x="${w / 2}" y="288" font-size="30" fill="${C.muted}" text-anchor="middle">Hear a word in a strange tongue. Spell it. Closest <tspan fill="${C.accent2}">sound</tspan> wins.</text>
+    ${flow}
+    ${waveform(250, 510, 700, 100, 22, C.accent2, 7, 2.6)}
+    <text x="${w / 2}" y="566" font-size="24" fill="${C.ink}" text-anchor="middle" font-weight="600">Free · Online Multiplayer · Plays in your browser</text>
+    <text x="${w / 2}" y="600" font-size="22" fill="${C.accent2}" text-anchor="middle">babble.hebdo.duckdns.org</text>`;
+  return svg(w, h, body);
+}
+
 const files = {
   'banner.svg': banner(),
   'gameplay.svg': gameplay(),
   'architecture.svg': architecture(),
   'scoring.svg': scoring(),
   'reveal-mockup.svg': revealMock(),
+  'og.svg': ogCard(),
 };
 for (const [name, content] of Object.entries(files)) {
   fs.writeFileSync(path.join(OUT, name), content);

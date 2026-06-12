@@ -1,0 +1,15 @@
+{
+  "name": "Babble — spell what you hear",
+  "short_name": "Babble",
+  "description": "Free online multiplayer party game: hear a strange word, spell what you heard, and the closest-sounding guess wins.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f1020",
+  "theme_color": "#0f1020",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any" },
+    { "src": "/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any maskable" }
+  ]
+}

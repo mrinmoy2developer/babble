@@ -220,6 +220,7 @@ src/game.js            Room + round state machine (lobby → rounds → results)
 src/stats.js           persistent global counters (visitors, games played)
 scripts/piper_server.py  persistent Piper sidecar (keeps voice models resident)
 public/                index.html · style.css · client.js (Web Audio playback + waveforms)
+                       + SEO: robots.txt · sitemap.xml · site.webmanifest · og-image.png
 assets/                README graphics (make-graphics.js) + screenshots (screenshot.js)
 test/                  phonetics · tts · game (unit) · integration · features (e2e)
 ```
