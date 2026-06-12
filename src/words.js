@@ -236,8 +236,17 @@ function generateWord({ sources, difficulty = 2 } = {}) {
   };
 }
 
+// A small round flag per pack. 2-letter values are ISO codes (rendered as a flag
+// image); word values are special badges (fantasy / gibberish) shown as emoji.
+const FLAGS = {
+  gibberish: 'dice', japanesque: 'jp', italiano: 'it', germanesque: 'de',
+  banglaish: 'bd', espanol: 'es', francais: 'fr', russesque: 'ru', arabesque: 'sa',
+  polynesian: 'isle', koreanesque: 'kr', hindesque: 'in', swahilesque: 'ke',
+  hellenic: 'gr', turkic: 'tr', zhonghua: 'cn', nordic: 'no', elvish: 'elf', orcish: 'orc',
+};
+
 function listSources() {
-  return SOURCE_KEYS.map((k) => ({ key: k, label: PACKS[k].label }));
+  return SOURCE_KEYS.map((k) => ({ key: k, label: PACKS[k].label, flag: FLAGS[k] || 'dice' }));
 }
 
 module.exports = { generateWord, listSources, PACKS, SOURCE_KEYS };

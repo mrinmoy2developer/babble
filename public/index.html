@@ -107,6 +107,8 @@
       <label>Your name
         <input id="name-input" maxlength="20" placeholder="e.g. Ada" autocomplete="off" />
       </label>
+      <label>Pick your avatar</label>
+      <div id="avatar-picker" class="avatar-picker"></div>
       <div class="row">
         <button id="btn-create" class="primary">Create room</button>
       </div>
@@ -159,10 +161,10 @@
 
           <label>Answer language (what you spell in)
             <select id="answer-lang">
-              <option value="en">English</option>
-              <option value="bn">Bengali (বাংলা)</option>
-              <option value="es">Spanish</option>
-              <option value="mixed">Mixed — English + Bengali (বাংলা)</option>
+              <option value="en">🇬🇧 English</option>
+              <option value="bn">🇧🇩 Bengali (বাংলা)</option>
+              <option value="es">🇪🇸 Spanish</option>
+              <option value="mixed">🇬🇧+🇧🇩 Mixed — English + Bengali</option>
             </select>
           </label>
 
@@ -213,6 +215,7 @@
           <button id="btn-slow" class="ghost">🐢 Slower</button>
         </div>
         <p class="listen-hint">Replay as many times as you like. <span id="syl-hint"></span></p>
+        <p id="think-word" class="thinking" hidden><span class="baby">👶</span> figuring out how to say it…</p>
       </div>
 
       <form id="guess-form" class="guess">
@@ -222,6 +225,7 @@
           <button type="submit" class="primary">Lock in guess</button>
           <button type="button" id="btn-hear-self" class="ghost">🔊 Hear my guess</button>
         </div>
+        <p id="think-guess" class="thinking" hidden><span class="baby">👶</span> sounding out your spelling…</p>
       </form>
       <p id="guess-status" class="hint"></p>
       <p id="submitted-count" class="count"></p>

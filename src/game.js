@@ -54,12 +54,19 @@ class Room {
   }
 
   // --- players -------------------------------------------------------------
-  addPlayer(id, name) {
+  addPlayer(id, name, avatar) {
     const clean = (name || 'Player').toString().slice(0, 20).trim() || 'Player';
     const isHost = this.players.size === 0;
     if (isHost) this.hostId = id;
-    this.players.set(id, { id, name: clean, score: 0, connected: true, isHost });
+    this.players.set(id, {
+      id, name: clean, avatar: cleanAvatar(avatar), score: 0, connected: true, isHost,
+    });
     return this.players.get(id);
+  }
+
+  setAvatar(id, avatar) {
+    const p = this.players.get(id);
+    if (p) p.avatar = cleanAvatar(avatar) || p.avatar;
   }
 
   removePlayer(id) {
@@ -179,6 +186,7 @@ class Room {
     this.emit('guess:locked', {
       id,
       name: player.name,
+      avatar: player.avatar,
       firstLock,
       submitted: this.guesses.size,
       total: this.players.size,
@@ -229,6 +237,7 @@ class Room {
         return {
           id: p.id,
           name: p.name,
+          avatar: p.avatar,
           guess: text,
           phonemes: guessPhonemes,
           audio,
@@ -265,7 +274,7 @@ class Room {
 
   leaderboard() {
     return [...this.players.values()]
-      .map((p) => ({ id: p.id, name: p.name, score: p.score, isHost: p.isHost }))
+      .map((p) => ({ id: p.id, name: p.name, avatar: p.avatar, score: p.score, isHost: p.isHost }))
       .sort((a, b) => b.score - a.score);
   }
 
@@ -312,6 +321,11 @@ class Room {
 
 function clamp(n, lo, hi) {
   return Math.max(lo, Math.min(hi, Math.round(n)));
+}
+
+// Avatars are a single emoji chosen client-side; keep it short and harmless.
+function cleanAvatar(a) {
+  return typeof a === 'string' ? [...a].slice(0, 3).join('') : '';
 }
 
 module.exports = { Room, makeCode, DEFAULT_SETTINGS };

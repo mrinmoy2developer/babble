@@ -21,15 +21,45 @@
   }
 
   // ----- local state -------------------------------------------------------
-  const me = { id: null, name: localStorage.getItem('babble.name') || '' };
+  const AVATARS = ['🦊', '🐼', '🐧', '🐸', '🦄', '🐙', '🐯', '🐵', '🐶', '🐱', '🦁', '🐮',
+    '🐷', '🐔', '🦉', '🐢', '🦖', '👽', '🤖', '🐲', '🐝', '🦋', '🐺', '🐨'];
+  const me = { id: null, name: localStorage.getItem('babble.name') || '',
+    avatar: localStorage.getItem('babble.avatar') || AVATARS[Math.floor(Math.random() * AVATARS.length)] };
+
+  // circular flag for a language pack (ISO code -> image, special token -> emoji badge)
+  function flagHtml(flag) {
+    const e = { dice: '🎲', isle: '🏝️', elf: '🧝', orc: '👹' };
+    if (e[flag]) return `<span class="flag">${e[flag]}</span>`;
+    return `<span class="flag"><img loading="lazy" src="https://flagcdn.com/w40/${flag}.png" alt="" /></span>`;
+  }
+  const avatarSpan = (a) => (a ? `<span class="avatar">${escapeHtml(a)}</span>` : '');
   // a small persistent profile (offline; "Sign in with Google" could sync this later)
   const profile = (() => { try { return JSON.parse(localStorage.getItem('babble.profile')) || {}; } catch (_) { return {}; } })();
   function renderProfile() {
     const el = $('profile');
     if (profile.games) {
-      el.innerHTML = `👤 <b>${escapeHtml(me.name || 'You')}</b> · ${profile.games} game${profile.games > 1 ? 's' : ''} played · best <b>${profile.best || 0}</b> · 🏆 ${profile.wins || 0} win${profile.wins === 1 ? '' : 's'}`;
+      el.innerHTML = `${avatarSpan(me.avatar)} <b>${escapeHtml(me.name || 'You')}</b> · ${profile.games} game${profile.games > 1 ? 's' : ''} played · best <b>${profile.best || 0}</b> · 🏆 ${profile.wins || 0} win${profile.wins === 1 ? '' : 's'}`;
     } else { el.textContent = ''; }
   }
+  function buildAvatarPicker() {
+    const box = $('avatar-picker');
+    box.innerHTML = '';
+    AVATARS.forEach((a) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = a;
+      if (a === me.avatar) b.classList.add('sel');
+      b.onclick = () => {
+        me.avatar = a;
+        localStorage.setItem('babble.avatar', a);
+        box.querySelectorAll('button').forEach((x) => x.classList.toggle('sel', x === b));
+        socket.emit('player:avatar', { avatar: a }); // live-update if already in a room
+        renderProfile();
+        sfx.blip(660, 0.06);
+      };
+      box.appendChild(b);
+    });
+  }
+  buildAvatarPicker();
   let state = null; // last room snapshot
   let current = { audio: '', buffer: null }; // current round target
   let answerLang = 'en';
@@ -256,13 +286,13 @@
   }
   function joinByCode(code) {
     ctx();
-    socket.emit('room:join', { code, name: nameVal() }, (res) => {
+    socket.emit('room:join', { code, name: nameVal(), avatar: me.avatar }, (res) => {
       if (!res.ok) $('join-error').textContent = res.error || 'Could not join';
     });
   }
   $('btn-create').onclick = () => {
     ctx();
-    socket.emit('room:create', { name: nameVal() }, (res) => {
+    socket.emit('room:create', { name: nameVal(), avatar: me.avatar }, (res) => {
       if (!res.ok) $('join-error').textContent = res.error || 'Could not create room';
     });
   };
@@ -310,7 +340,7 @@
     ul.innerHTML = '';
     s.players.forEach((p) => {
       const li = document.createElement('li');
-      li.innerHTML = `<span>${p.id === me.id ? '➤ ' : ''}${escapeHtml(p.name)}</span>` +
+      li.innerHTML = `<span>${p.id === me.id ? '➤ ' : ''}${avatarSpan(p.avatar)} ${escapeHtml(p.name)}</span>` +
         `<span>${p.isHost ? '<span class="crown">👑 host</span>' : ''}</span>`;
       ul.appendChild(li);
     });
@@ -321,7 +351,7 @@
       s.sources.forEach((src) => {
         const id = `src-${src.key}`;
         const label = document.createElement('label');
-        label.innerHTML = `<input type="checkbox" id="${id}" value="${src.key}"> ${escapeHtml(src.label)}`;
+        label.innerHTML = `<input type="checkbox" id="${id}" value="${src.key}"> ${flagHtml(src.flag)} ${escapeHtml(src.label)}`;
         box.appendChild(label);
         label.querySelector('input').onchange = pushSettings;
       });
@@ -434,12 +464,20 @@
   const playWord = () => { if (origPlayer) origPlayer.play(0); else playB64(current.audio); };
   $('btn-replay').onclick = playWord;
   $('btn-replay-target').onclick = playWord;
-  $('btn-slow').onclick = () => socket.emit('word:slow', {}, (res) => { if (res && res.audio) playB64(res.audio); });
+  $('btn-slow').onclick = () => {
+    $('think-word').hidden = false;
+    socket.emit('word:slow', {}, (res) => {
+      $('think-word').hidden = true;
+      if (res && res.audio) playB64(res.audio);
+    });
+  };
 
   $('btn-hear-self').onclick = () => {
     const text = $('guess-input').value.trim();
     if (!text) return;
+    $('think-guess').hidden = false;
     socket.emit('guess:preview', { text }, async (res) => {
+      $('think-guess').hidden = true;
       if (!res || !res.audio) return;
       if (previewWaves) await addTry(text, res.audio);
       else playB64(res.audio);
@@ -539,6 +577,8 @@
     $('guess-input').value = '';
     $('guess-status').textContent = '';
     $('submitted-count').textContent = '';
+    $('think-word').hidden = true;
+    $('think-guess').hidden = true;
 
     // preview area
     if (origPlayer) origPlayer.stop();
@@ -561,7 +601,7 @@
   socket.on('guess:locked', (d) => {
     $('submitted-count').textContent = `${d.submitted} / ${d.total} locked in`;
     if (d.firstLock && d.id !== me.id) {
-      toast(`<span class="lock">🔒</span> ${escapeHtml(d.name)} locked in their guess`);
+      toast(`<span class="lock">🔒</span> ${avatarSpan(d.avatar)} ${escapeHtml(d.name)} locked in their guess`);
       sfx.lock();
     }
   });
@@ -597,7 +637,7 @@
       li.innerHTML =
         `<span class="rank">${medal(i)}</span>` +
         `<button class="play-btn" ${r.audio ? '' : 'disabled'} title="Play guess">▶</button>` +
-        `<span class="who">${escapeHtml(r.name)}${r.id === me.id ? ' (you)' : ''}` +
+        `<span class="who">${avatarSpan(r.avatar)} ${escapeHtml(r.name)}${r.id === me.id ? ' (you)' : ''}` +
         `<span class="guessed"> — “${r.guess ? spanLetters(r.guess) : '—'}”</span></span>` +
         `<span class="pts">+${r.points}</span>` +
         `<span class="total">${r.total} pts</span>` +
@@ -654,7 +694,7 @@
       const li = document.createElement('li');
       li.innerHTML =
         `<span class="rank">${medal(i)}</span>` +
-        `<span class="who">${escapeHtml(p.name)}${p.id === me.id ? ' (you)' : ''}</span>` +
+        `<span class="who">${avatarSpan(p.avatar)} ${escapeHtml(p.name)}${p.id === me.id ? ' (you)' : ''}</span>` +
         `<span class="pts">${p.score}</span>`;
       ul.appendChild(li);
     });

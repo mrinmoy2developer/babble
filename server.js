@@ -51,22 +51,22 @@ io.on('connection', (socket) => {
   socket.emit('stats', { ...stats.get(), online: io.engine.clientsCount });
   broadcastStats();
 
-  socket.on('room:create', ({ name }, ack) => {
+  socket.on('room:create', ({ name, avatar }, ack) => {
     let code = makeCode();
     while (rooms.has(code)) code = makeCode();
     const room = getOrCreateRoom(code);
-    joinRoom(socket, room, name);
+    joinRoom(socket, room, name, avatar);
     if (typeof ack === 'function') ack({ ok: true, code });
   });
 
-  socket.on('room:join', ({ code, name }, ack) => {
+  socket.on('room:join', ({ code, name, avatar }, ack) => {
     code = (code || '').toString().toUpperCase().trim();
     const room = rooms.get(code);
     if (!room) {
       if (typeof ack === 'function') ack({ ok: false, error: 'Room not found' });
       return;
     }
-    joinRoom(socket, room, name);
+    joinRoom(socket, room, name, avatar);
     if (typeof ack === 'function') ack({ ok: true, code });
   });
 
@@ -79,6 +79,14 @@ io.on('connection', (socket) => {
     const room = currentRoom(socket);
     if (room) {
       room.setName(socket.id, name);
+      broadcastLobby(room);
+    }
+  });
+
+  socket.on('player:avatar', ({ avatar }) => {
+    const room = currentRoom(socket);
+    if (room) {
+      room.setAvatar(socket.id, avatar);
       broadcastLobby(room);
     }
   });
@@ -141,11 +149,11 @@ io.on('connection', (socket) => {
   socket.on('room:leave', () => leaveRoom(socket));
 });
 
-function joinRoom(socket, room, name) {
+function joinRoom(socket, room, name, avatar) {
   leaveRoom(socket); // ensure single-room membership
   socket.join(room.code);
   where.set(socket.id, room.code);
-  const player = room.addPlayer(socket.id, name);
+  const player = room.addPlayer(socket.id, name, avatar);
   socket.emit('room:joined', { you: player.id, ...room.publicState() });
   broadcastLobby(room);
 }

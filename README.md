@@ -200,6 +200,9 @@ visibility and the preview toggle.
 - **Win:** confetti + a victory fanfare on the final standings.
 - **Karaoke playback:** every waveform has a **draggable playhead** (scrub to any
   point) and the spelling's letters **shade in sync** as the word is pronounced.
+- **Avatars & flags:** pick a cartoon avatar (shown beside your name everywhere);
+  each word-source pack has a small round flag. While a guess/word is still being
+  synthesized, a 👶 scratches its head.
 - **Mixed scripts:** the "Mixed" answer language scores guesses that blend Bengali
   and English (e.g. `বাট ball`), decoding each script run with its own rules.
 
