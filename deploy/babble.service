@@ -1,0 +1,32 @@
+# systemd unit for Babble — keeps the server running, restarts on crash/reboot.
+#
+# Install:
+#   1. Edit User=, WorkingDirectory=, and the node path below to match your box.
+#      Find your node path with:  which node
+#   2. sudo cp deploy/babble.service /etc/systemd/system/babble.service
+#   3. sudo systemctl daemon-reload
+#   4. sudo systemctl enable --now babble
+#   5. journalctl -u babble -f      # live logs
+
+[Unit]
+Description=Babble game server
+After=network.target
+
+[Service]
+Type=simple
+User=mrinmoy
+WorkingDirectory=/home/mrinmoy/babble
+# Use the absolute path from `which node` (nvm installs live elsewhere):
+ExecStart=/usr/bin/node server.js
+Environment=NODE_ENV=production
+Environment=PORT=3000
+# Only listen on localhost since nginx fronts it (remove if you expose 3000 directly):
+Environment=HOST=127.0.0.1
+Restart=on-failure
+RestartSec=3
+# light hardening
+NoNewPrivileges=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

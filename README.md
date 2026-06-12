@@ -59,6 +59,51 @@ makes scoring fair. It's articulate rather than Hollywood-natural; for a
 "spell-the-sound" game that accuracy is the point (and gibberish has no natural
 reading anyway).
 
+## Deploying to production
+
+A small Node app — any VPS works. Example on a fresh **Debian/Ubuntu** box:
+
+```bash
+# 1. prerequisites
+sudo apt update
+sudo apt install -y nodejs npm espeak-ng nginx   # espeak-ng = the TTS engine on Linux
+
+# 2. get the code + install deps
+git clone <your-repo> ~/babble && cd ~/babble
+npm install --omit=dev                            # runtime deps only
+
+# 3. run it as a service (survives crashes, reboots, logout)
+#    edit User=/WorkingDirectory=/node path in the file first — see `which node`
+sudo cp deploy/babble.service /etc/systemd/system/babble.service
+sudo systemctl daemon-reload && sudo systemctl enable --now babble
+journalctl -u babble -f                           # logs; should show "TTS backend: espeak-ng"
+
+# 4. put nginx in front (handles the WebSocket upgrade Socket.IO needs)
+sudo cp deploy/nginx-babble.conf /etc/nginx/sites-available/babble
+sudo ln -s /etc/nginx/sites-available/babble /etc/nginx/sites-enabled/babble
+sudo nginx -t && sudo systemctl reload nginx
+
+# 5. HTTPS (free, recommended — WebSockets + mic-free audio still want a secure origin)
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d your-domain.com
+```
+
+Then open `https://your-domain.com`. The service binds to `127.0.0.1:3000`
+(set in the unit file) so the app is only reachable through nginx.
+
+**Firewall (GCP/AWS/etc.):** allow inbound **80** and **443**; you do *not* need
+to expose 3000. On GCP:
+
+```bash
+gcloud compute firewall-rules create babble-web --allow tcp:80,tcp:443 --source-ranges 0.0.0.0/0
+```
+
+**Config via env vars:** `PORT` (default 3000), `HOST` (default `0.0.0.0`; set
+`127.0.0.1` behind a proxy). No other configuration or API keys.
+
+> Don't have a domain? Skip nginx/certbot, set `HOST=0.0.0.0` in the unit file,
+> open port 3000 in the firewall, and reach it at `http://<vps-ip>:3000`.
+
 ## How scoring works (the interesting bit)
 
 Comparing raw audio waveforms in a browser is flaky, so Babble scores in a

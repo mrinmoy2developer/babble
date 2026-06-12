@@ -168,12 +168,25 @@ function publicRooms() {
 }
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  const tts = backendName();
-  console.log(`Babble running at http://localhost:${PORT}`);
-  console.log(`TTS backend: ${tts}`);
-  if (tts === 'none') {
-    console.warn('  ⚠ No speech engine found. Install espeak-ng (e.g. `brew install espeak-ng`)');
-    console.warn('    or run on macOS, otherwise words will be silent.');
-  }
-});
+// Behind a reverse proxy, set HOST=127.0.0.1 so the app is only reachable via
+// the proxy. Default 0.0.0.0 keeps the simple "open the IP:port" setup working.
+const HOST = process.env.HOST || '0.0.0.0';
+
+server
+  .listen(PORT, HOST, () => {
+    const tts = backendName();
+    console.log(`Babble running on http://${HOST}:${PORT}`);
+    console.log(`TTS backend: ${tts}`);
+    if (tts === 'none') {
+      console.warn('  ⚠ No speech engine found. Install espeak-ng (e.g. `sudo apt install espeak-ng`)');
+      console.warn('    or run on macOS, otherwise words will be silent.');
+    }
+  })
+  .on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n✖ Port ${PORT} is already in use — another server is running.`);
+      console.error(`  Stop it (e.g. \`pkill -f 'node server.js'\`) or start on another port: PORT=3001 npm start\n`);
+      process.exit(1);
+    }
+    throw err;
+  });
