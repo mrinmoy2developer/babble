@@ -13,7 +13,7 @@
 
 const { generateWord, listSources } = require('./words');
 const { g2p, score } = require('./phonetics');
-const { synthPhonemesB64 } = require('./tts');
+const { synthPhonemesB64, listVoices, defaultVoice } = require('./tts');
 
 const DEFAULT_SETTINGS = {
   sources: ['gibberish'],
@@ -24,6 +24,7 @@ const DEFAULT_SETTINGS = {
   difficulty: 2,
   visibility: 'public', // 'public' (listed in the browser) | 'private' (code only)
   previewWaves: true, // let players see/compare waveforms before submitting
+  voice: '', // piper voice id (resolved to a real default per-room below)
 };
 
 function makeCode() {
@@ -40,7 +41,7 @@ class Room {
     this.emit = emit; // broadcasts to everyone in the room
     this.players = new Map(); // id -> { id, name, score, connected, isHost }
     this.hostId = null;
-    this.settings = { ...DEFAULT_SETTINGS };
+    this.settings = { ...DEFAULT_SETTINGS, voice: defaultVoice() };
     this.state = 'lobby';
     this.round = 0;
     this.word = null; // { phonemes, spelling, voice, source }
@@ -94,6 +95,10 @@ class Room {
     if (Number.isFinite(patch.difficulty)) s.difficulty = clamp(patch.difficulty, 1, 5);
     if (patch.visibility === 'public' || patch.visibility === 'private') s.visibility = patch.visibility;
     if (typeof patch.previewWaves === 'boolean') s.previewWaves = patch.previewWaves;
+    if (typeof patch.voice === 'string') {
+      const ids = listVoices().map((v) => v.id);
+      if (patch.voice === '' || ids.includes(patch.voice)) s.voice = patch.voice;
+    }
     return true;
   }
 
@@ -118,7 +123,7 @@ class Room {
     });
     // Render the target to audio on the server. Only the audio is sent — never
     // the phonemes — so the answer can't be read off the wire during play.
-    this.word.audio = await synthPhonemesB64(this.word.phonemes);
+    this.word.audio = await synthPhonemesB64(this.word.phonemes, { voice: this.settings.voice });
     if (this.state !== 'playing') return; // round was aborted while rendering
 
     this.deadline = Date.now() + this.settings.roundSeconds * 1000;
@@ -159,7 +164,7 @@ class Room {
   // On-demand slower re-render of the current word for the "slower" button.
   async renderCurrentSlow() {
     if (!this.word) return null;
-    return synthPhonemesB64(this.word.phonemes, { wpm: 100 });
+    return synthPhonemesB64(this.word.phonemes, { wpm: 100, voice: this.settings.voice });
   }
 
   submitGuess(id, text) {
@@ -220,7 +225,7 @@ class Room {
         p.score += points;
         // Render each guess from the SAME phonemes it was scored on, so the
         // audio you hear is exactly what the comparison judged.
-        const audio = text ? await synthPhonemesB64(guessPhonemes) : '';
+        const audio = text ? await synthPhonemesB64(guessPhonemes, { voice: this.settings.voice }) : '';
         return {
           id: p.id,
           name: p.name,
@@ -274,6 +279,7 @@ class Room {
       round: this.round,
       players: this.leaderboard(),
       sources: listSources(),
+      voices: listVoices(),
       paused: this.paused,
       deadline: this.state === 'playing' && !this.paused ? this.deadline : 0,
       // a mid-round joiner gets the current word's audio so they can play along

@@ -67,21 +67,28 @@ with `BABBLE_TTS=piper|say|espeak`.
 **Using Piper (the natural one):**
 
 ```bash
-# 1. install piper + download a voice (medium = natural, ~60 MB)
+# 1. install piper + download one or more voices into a folder (medium ≈ natural)
 python3 -m venv ~/piper && ~/piper/bin/pip install piper-tts
 mkdir -p ~/piper-voices && cd ~/piper-voices
-~/piper/bin/python -m piper.download_voices en_US-amy-medium   # browse names with: ... download_voices
+~/piper/bin/python -m piper.download_voices en_US-amy-medium
+~/piper/bin/python -m piper.download_voices en_GB-cori-high      # add as many as you like
 
-# 2. point Babble at it
-export BABBLE_TTS=piper
-export PIPER_BIN=~/piper/bin/piper
-export PIPER_MODEL=~/piper-voices/en_US-amy-medium.onnx
-npm start            # boot log should read: TTS backend: piper (en_US-amy-medium)
+# 2. point Babble at the folder
+export PIPER_VOICES_DIR=~/piper-voices
+export PIPER_PY=~/piper/bin/python                # the venv python that has piper-tts
+npm start            # boot log: TTS backend: piper (2 voices)
 ```
 
-In production set those three as `Environment=` lines in `deploy/babble.service`.
-Swap the voice by downloading another model (e.g. `en_GB-cori-high`,
-`en_US-lessac-medium`) and changing `PIPER_MODEL`.
+Every `*.onnx` in `PIPER_VOICES_DIR` becomes a **voice players can pick in the
+lobby** (host setting). `PIPER_DEFAULT_VOICE` chooses the default; browse names
+with `python -m piper.download_voices` (no args). In production set those as
+`Environment=` lines in `deploy/babble.service`.
+
+**Why it's fast:** a small persistent Python sidecar (`scripts/piper_server.py`)
+loads each voice model **once** and keeps it resident, so synthesis is ~20 ms
+instead of reloading the ~0.5 s model on every word. Babble spawns and supervises
+it automatically and pre-warms the default voice at boot — you still just run one
+process. (Needs Python 3 + `piper-tts` on the server.)
 
 Whichever backend, the synthesizer is driven by a **consistent spelling** of each
 word's phonemes, so the target and every guess always render the same way — which
@@ -171,12 +178,17 @@ the target phonemes until the reveal.
 |---|---|
 | Word sources | Which of the **19 packs** the engine draws from — Gibberish, real-language flavours (Japanese, Italian, German, Bengali, Spanish, French, Russian, Arabic, Polynesian, Korean, Hindi, Swahili, Greek, Turkish, Mandarin, Nordic) and fantasy (Elvish, Orcish) |
 | Answer language | Which decoder scores your guesses (English / Bengali / Spanish) |
+| Voice | Which Piper voice speaks the words (shown when piper voices are installed) |
 | Rounds | 1–20 |
 | Seconds / round | 10–180 |
 | Reveal seconds | 5–60, how long results show before the next round |
 | Difficulty | 1–5, scales word length (syllable count) |
 | Public lobby | Public games are listed in the join-screen browser; private games are code-only |
 | Waveform preview | Lets players see the original waveform and stack/compare their tries before submitting |
+
+The lobby has a **Simple / Advanced** toggle — Simple shows just the essentials
+(sources, language, voice, rounds); Advanced reveals timing, difficulty,
+visibility and the preview toggle.
 
 ### During a game
 
@@ -198,6 +210,7 @@ src/phonetics.js       text→sound decoder (g2p) + sound comparison (score)
 src/tts.js             server-side speech synth (macOS say / espeak-ng)
 src/words.js           the automated word/gibberish generator
 src/game.js            Room + round state machine (lobby → rounds → results)
+scripts/piper_server.py  persistent Piper sidecar (keeps voice models resident)
 public/                index.html · style.css · client.js (Web Audio playback + waveforms)
 assets/                README graphics (make-graphics.js) + screenshots (screenshot.js)
 test/                  phonetics · tts · game (unit) · integration · features (e2e)

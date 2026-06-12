@@ -23,11 +23,13 @@ Environment=PORT=3000
 # Only listen on localhost since nginx fronts it (remove if you expose 3000 directly):
 Environment=HOST=127.0.0.1
 # TTS backend: auto (default) | piper | say | espeak.
-# For natural neural voices, install piper + a voice model (see README) and set:
-#   Environment=BABBLE_TTS=piper
-#   Environment=PIPER_BIN=/home/mrinmoy/piper/bin/piper
-#   Environment=PIPER_MODEL=/home/mrinmoy/piper-voices/en_US-amy-medium.onnx
-# Otherwise it falls back to espeak-ng (sudo apt install espeak-ng).
+# For natural neural voices, install piper + voice models (see README) and set:
+#   Environment=PIPER_VOICES_DIR=/home/mrinmoy/piper-voices
+#   Environment=PIPER_PY=/home/mrinmoy/piper/bin/python
+#   Environment=PIPER_DEFAULT_VOICE=en_US-amy-medium
+# Drop any number of *.onnx voices in that folder; players pick one in the lobby.
+# The model stays resident (a small Python sidecar), so synthesis is ~20ms.
+# Without piper it falls back to espeak-ng (sudo apt install espeak-ng).
 Restart=on-failure
 RestartSec=3
 # light hardening

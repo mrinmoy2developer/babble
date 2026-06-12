@@ -254,6 +254,23 @@
       if (cb && document.activeElement !== cb) cb.checked = s.settings.sources.includes(src.key);
     });
 
+    // voices (only shown when the server has a piper backend with models)
+    const voices = s.voices || [];
+    const vsel = $('voice-select');
+    $('voice-row').hidden = voices.length === 0;
+    if (voices.length && vsel.dataset.sig !== voices.map((v) => v.id).join(',')) {
+      vsel.innerHTML = '';
+      voices.forEach((v) => {
+        const o = document.createElement('option');
+        o.value = v.id; o.textContent = v.label;
+        vsel.appendChild(o);
+      });
+      vsel.dataset.sig = voices.map((v) => v.id).join(',');
+    }
+    if (voices.length && document.activeElement !== vsel) {
+      vsel.value = s.settings.voice || voices[0].id;
+    }
+
     setIfIdle('answer-lang', s.settings.answerLang);
     setRange('rounds', 'rounds-out', s.settings.rounds);
     setRange('secs', 'secs-out', s.settings.roundSeconds);
@@ -281,6 +298,7 @@
     socket.emit('room:settings', {
       sources: sources.length ? sources : undefined,
       answerLang: $('answer-lang').value,
+      voice: $('voice-select').value,
       rounds: +$('rounds').value,
       roundSeconds: +$('secs').value,
       revealSeconds: +$('reveal').value,
@@ -300,6 +318,18 @@
   });
   $('set-public').onchange = pushSettings;
   $('set-preview').onchange = pushSettings;
+  $('voice-select').onchange = pushSettings;
+
+  // Simple/Advanced settings view (a per-player UI preference, not a room setting)
+  function setMode(pro) {
+    $('settings').classList.toggle('simple', !pro);
+    $('mode-pro').classList.toggle('active', pro);
+    $('mode-simple').classList.toggle('active', !pro);
+    localStorage.setItem('babble.mode', pro ? 'pro' : 'simple');
+  }
+  $('mode-simple').onclick = () => setMode(false);
+  $('mode-pro').onclick = () => setMode(true);
+  setMode(localStorage.getItem('babble.mode') === 'pro');
 
   $('btn-start').onclick = () => { ctx(); showLoading(); socket.emit('game:start'); };
   $('btn-leave').onclick = () => { socket.emit('room:leave'); location.reload(); };

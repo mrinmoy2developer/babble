@@ -14,7 +14,7 @@ const { Server } = require('socket.io');
 
 const { Room, makeCode } = require('./src/game');
 const { g2p } = require('./src/phonetics');
-const { synthPhonemesB64, backendName } = require('./src/tts');
+const { synthPhonemesB64, backendName, warmup } = require('./src/tts');
 
 const app = express();
 const server = http.createServer(app);
@@ -115,7 +115,9 @@ io.on('connection', (socket) => {
   socket.on('guess:preview', async ({ text }, ack) => {
     const room = currentRoom(socket);
     if (!room || typeof ack !== 'function') return;
-    const audio = await synthPhonemesB64(g2p(text || '', room.settings.answerLang));
+    const audio = await synthPhonemesB64(g2p(text || '', room.settings.answerLang), {
+      voice: room.settings.voice,
+    });
     ack({ audio });
   });
 
@@ -179,10 +181,12 @@ server
     console.log(`TTS backend: ${tts}`);
     if (tts === 'none') {
       console.warn('  ⚠ No speech engine found — words will be silent. Options:');
-      console.warn('    • piper (neural, natural): set PIPER_MODEL=/path/voice.onnx (+ PIPER_BIN)');
+      console.warn('    • piper (neural, natural): set PIPER_VOICES_DIR=/path/to/voices (+ PIPER_PY)');
       console.warn('    • espeak-ng (robotic): sudo apt install espeak-ng');
       console.warn('    • macOS: the built-in `say` is used automatically');
       console.warn('    Force one with BABBLE_TTS=piper|say|espeak.');
+    } else {
+      warmup(); // pre-load piper so the first round is instant (no-op otherwise)
     }
   })
   .on('error', (err) => {

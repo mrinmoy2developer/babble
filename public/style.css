@@ -130,6 +130,16 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .host-only-tag { font-size: 0.7rem; color: var(--muted); font-weight: 400; }
 .settings.locked { opacity: 0.6; pointer-events: none; }
 
+/* simple/advanced mode toggle */
+.settings-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.settings-head h3 { margin: 0; }
+.mode-toggle { display: inline-flex; background: #0d0e22; border: 1px solid #34387a; border-radius: 999px; padding: 2px; }
+.mode-toggle .seg { background: transparent; border: none; color: var(--muted); padding: 5px 14px; border-radius: 999px; font-size: 0.82rem; }
+.mode-toggle .seg.active { background: linear-gradient(135deg, var(--accent), #9d7bff); color: #fff; }
+/* hide advanced rows when in simple mode */
+.settings.simple .adv { display: none; }
+#voice-select { width: 100%; }
+
 /* play */
 .play-head { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
 .pill { background: #14162f; padding: 8px 14px; border-radius: 999px; color: var(--muted); }

@@ -88,8 +88,14 @@
           <ul id="player-list" class="players"></ul>
         </div>
 
-        <div id="settings" class="settings">
-          <h3>Settings <span class="host-only-tag">host only</span></h3>
+        <div id="settings" class="settings simple">
+          <div class="settings-head">
+            <h3>Settings <span class="host-only-tag">host only</span></h3>
+            <div class="mode-toggle" role="tablist">
+              <button id="mode-simple" class="seg active" type="button">Simple</button>
+              <button id="mode-pro" class="seg" type="button">Advanced</button>
+            </div>
+          </div>
 
           <label>Word sources (what you'll hear)</label>
           <div id="source-checks" class="checks"></div>
@@ -102,22 +108,26 @@
             </select>
           </label>
 
+          <label id="voice-row" hidden>🗣️ Voice
+            <select id="voice-select"></select>
+          </label>
+
           <div class="sliders">
             <label>Rounds <output id="rounds-out">5</output>
               <input id="rounds" type="range" min="1" max="20" value="5" />
             </label>
-            <label>Seconds / round <output id="secs-out">45</output>
+            <label class="adv">Seconds / round <output id="secs-out">45</output>
               <input id="secs" type="range" min="10" max="180" step="5" value="45" />
             </label>
-            <label>Reveal seconds <output id="reveal-out">15</output>
+            <label class="adv">Reveal seconds <output id="reveal-out">15</output>
               <input id="reveal" type="range" min="5" max="60" step="1" value="15" />
             </label>
-            <label>Difficulty (word length) <output id="diff-out">2</output>
+            <label class="adv">Difficulty (word length) <output id="diff-out">2</output>
               <input id="diff" type="range" min="1" max="5" value="2" />
             </label>
           </div>
 
-          <div class="toggles">
+          <div class="toggles adv">
             <label class="switch"><input type="checkbox" id="set-public" checked> 🌐 Public lobby (listed for anyone to join)</label>
             <label class="switch"><input type="checkbox" id="set-preview" checked> 〰️ Allow waveform preview before submitting</label>
           </div>
