@@ -283,19 +283,39 @@
       this.dpr = Math.min(2, window.devicePixelRatio || 1);
       this.W = this.canvas.width = Math.floor(innerWidth * this.dpr);
       this.H = this.canvas.height = Math.floor(innerHeight * this.dpr);
-      this.spawn();
-    },
-    spawn() {
+      const count = Math.max(16, Math.min(30, Math.round(innerWidth / 45)));
       this.trains = [];
-      const count = Math.max(9, Math.min(16, Math.round(innerWidth / 95)));
-      for (let i = 0; i < count; i++) {
-        const s = SCRIPTS[i % SCRIPTS.length];
-        this.trains.push({
-          x: Math.random() * this.W, y: Math.random() * this.H,
-          a: Math.random() * Math.PI * 2, speed: (0.5 + Math.random() * 0.8) * this.dpr,
-          phase: Math.random() * 100, size: (22 + Math.random() * 16) * this.dpr,
-          color: s.c, glyphs: [...s.g], members: 3 + Math.floor(Math.random() * 4), hist: [], flash: 0,
-        });
+      for (let i = 0; i < count; i++) this.trains.push(this.makeTrain(i));
+    },
+    // a "mother duck + ducklings" chain that enters from just off-screen
+    makeTrain(i) {
+      const s = SCRIPTS[i % SCRIPTS.length];
+      const size = (22 + Math.random() * 16) * this.dpr;
+      const spacing = size * 1.4;                  // clear gap -> no clumping
+      const members = 4 + Math.floor(Math.random() * 5); // 4..8 ducklings
+      const edge = Math.floor(Math.random() * 4);
+      let x, y, a; // leader sits JUST off-screen; the tail trails further out
+      const spread = (Math.random() - 0.5) * (Math.PI / 3);
+      if (edge === 0) { x = -size; y = Math.random() * this.H; a = spread; }
+      else if (edge === 1) { x = this.W + size; y = Math.random() * this.H; a = Math.PI + spread; }
+      else if (edge === 2) { x = Math.random() * this.W; y = -size; a = Math.PI / 2 + spread; }
+      else { x = Math.random() * this.W; y = this.H + size; a = -Math.PI / 2 + spread; }
+      const nodes = [];
+      for (let k = 0; k < members; k++) {
+        nodes.push({ x: x - Math.cos(a) * spacing * k, y: y - Math.sin(a) * spacing * k, bob: Math.random() * 6.28, pop: 0 });
+      }
+      return { color: s.c, glyphs: [...s.g], nodes, a, speed: (0.9 + Math.random() * 0.9) * this.dpr, phase: Math.random() * 100, size, spacing, fade: 0, entered: false };
+    },
+    offscreen(tr) {
+      const m = tr.size + tr.spacing;
+      return tr.nodes.every((n) => n.x < -m || n.x > this.W + m || n.y < -m || n.y > this.H + m);
+    },
+    // react to a tap/click: nearby letters scatter + pop
+    poke(cx, cy) {
+      const R = 130 * this.dpr;
+      for (const tr of this.trains) for (const n of tr.nodes) {
+        const dx = n.x - cx, dy = n.y - cy, d = Math.hypot(dx, dy) || 1;
+        if (d < R) { const f = 1 - d / R; n.x += (dx / d) * f * 70 * this.dpr; n.y += (dy / d) * f * 70 * this.dpr; n.pop = Math.max(n.pop, f); }
       }
     },
     start() { if (this.running || !this.g) return; this.running = true; this.frame(); },
@@ -304,33 +324,46 @@
       if (!this.running) return;
       const g = this.g; const t = performance.now();
       g.clearRect(0, 0, this.W, this.H);
-      // bumps between train leaders at crossings
+      // mother ducks bumping at crossings -> bounce apart + pop
       for (let i = 0; i < this.trains.length; i++) {
         for (let j = i + 1; j < this.trains.length; j++) {
-          const A = this.trains[i], B = this.trains[j];
-          if (Math.hypot(A.x - B.x, A.y - B.y) < (A.size + B.size) * 0.5) {
-            A.a += 0.6; B.a -= 0.6; A.flash = B.flash = 9;
+          const A = this.trains[i].nodes[0], B = this.trains[j].nodes[0];
+          if (Math.hypot(A.x - B.x, A.y - B.y) < (this.trains[i].size + this.trains[j].size) * 0.55) {
+            this.trains[i].a += 0.5; this.trains[j].a -= 0.5; A.pop = B.pop = 1;
           }
         }
       }
       g.textAlign = 'center'; g.textBaseline = 'middle';
-      for (const tr of this.trains) {
-        tr.a += Math.sin(t * 0.0006 + tr.phase) * 0.03 + (Math.random() - 0.5) * 0.02;
-        tr.x += Math.cos(tr.a) * tr.speed; tr.y += Math.sin(tr.a) * tr.speed;
-        const m = tr.size;
-        if (tr.x < -m) tr.x += this.W + 2 * m; else if (tr.x > this.W + m) tr.x -= this.W + 2 * m;
-        if (tr.y < -m) tr.y += this.H + 2 * m; else if (tr.y > this.H + m) tr.y -= this.H + 2 * m;
-        tr.hist.unshift({ x: tr.x, y: tr.y });
-        const gap = 6;
-        if (tr.hist.length > tr.members * gap) tr.hist.length = tr.members * gap;
-        if (tr.flash > 0) tr.flash--;
-        for (let k = tr.members - 1; k >= 0; k--) {
-          const p = tr.hist[Math.min(tr.hist.length - 1, k * gap)];
-          if (!p) continue;
-          g.globalAlpha = Math.max(0.08, (0.8 - k * 0.12) * (tr.flash ? 1 : 0.7));
+      for (let idx = 0; idx < this.trains.length; idx++) {
+        const tr = this.trains[idx];
+        tr.fade = Math.min(1, tr.fade + 0.01);
+        tr.a += Math.sin(t * 0.0006 + tr.phase) * 0.025 + (Math.random() - 0.5) * 0.02;
+        const lead = tr.nodes[0];
+        lead.x += Math.cos(tr.a) * tr.speed;
+        lead.y += Math.sin(tr.a) * tr.speed;
+        // ducklings: each follows the one ahead at a fixed distance
+        for (let k = 1; k < tr.nodes.length; k++) {
+          const a = tr.nodes[k - 1], b = tr.nodes[k];
+          const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
+          b.x = a.x + (dx / d) * tr.spacing;
+          b.y = a.y + (dy / d) * tr.spacing;
+        }
+        // only recycle a train once it has actually entered and then fully left
+        const s = tr.size;
+        if (!tr.entered && tr.nodes.some((n) => n.x > -s && n.x < this.W + s && n.y > -s && n.y < this.H + s)) tr.entered = true;
+        if (tr.entered && this.offscreen(tr)) { this.trains[idx] = this.makeTrain(idx); continue; }
+        // draw tail -> head, each letter bouncing/popping like a little critter
+        for (let k = tr.nodes.length - 1; k >= 0; k--) {
+          const n = tr.nodes[k];
+          n.pop = Math.max(0, n.pop - 0.04);
+          if (Math.random() < 0.0007) n.pop = 1; // spontaneous pop
+          const bob = Math.sin(t * 0.004 + n.bob) * 4 * this.dpr;
+          const squash = 1 + Math.sin(t * 0.003 + n.bob) * 0.05; // gentle dribble
+          const sc = (1 + n.pop * 0.7) * squash;
+          g.globalAlpha = Math.max(0.12, (0.92 - k * 0.06) * tr.fade);
           g.fillStyle = tr.color;
-          g.font = `700 ${tr.size * (k === 0 && tr.flash ? 1.35 : 1)}px "Fredoka", system-ui, "Noto Sans", sans-serif`;
-          g.fillText(tr.glyphs[k % tr.glyphs.length], p.x, p.y);
+          g.font = `700 ${tr.size * sc}px "Fredoka", system-ui, "Noto Sans", sans-serif`;
+          g.fillText(tr.glyphs[k % tr.glyphs.length], n.x, n.y + bob);
         }
       }
       g.globalAlpha = 1;
@@ -386,6 +419,14 @@
   $('music-toggle').onclick = () => music.toggle();
   updateMusicBtn();
   bgLetters.init();
+  bgLetters.start(); // run on the intro screen too
+  // first interaction anywhere unlocks the melody (browser autoplay policy);
+  // taps/clicks also poke the nearby letters so they scatter and pop.
+  document.addEventListener('pointerdown', (e) => {
+    bgLetters.poke(e.clientX * bgLetters.dpr, e.clientY * bgLetters.dpr);
+    if (music.on) music.start();
+  });
+  document.addEventListener('keydown', () => { if (music.on) music.start(); });
 
   // ----- toasts ------------------------------------------------------------
   function toast(html) {

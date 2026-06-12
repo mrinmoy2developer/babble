@@ -352,9 +352,13 @@ button.small { padding: 6px 12px; font-size: 0.85rem; }
 .intro {
   position: fixed; inset: 0; z-index: 80; display: none;
   align-items: center; justify-content: center; padding: 24px;
-  background: radial-gradient(900px 500px at 50% 20%, #2a2d66 0%, var(--bg) 70%);
+  /* light veil so the animated background letters stay visible behind content */
+  background: radial-gradient(680px 420px at 50% 30%, rgba(15, 16, 32, 0.28) 0%, rgba(15, 16, 32, 0.5) 78%);
 }
 .intro.on { display: flex; }
+/* while the intro is up, hide the page content so only the animated letters
+   show through its translucent background (not the join card) */
+#intro.on ~ .topbar, #intro.on ~ #app { visibility: hidden; }
 .intro.fade-out { animation: introOut 0.5s ease forwards; }
 @keyframes introOut { to { opacity: 0; transform: scale(1.04); visibility: hidden; } }
 .intro-card { text-align: center; max-width: 640px; }
@@ -397,7 +401,7 @@ button.small { padding: 6px 12px; font-size: 0.85rem; }
 
 /* ---- music toggle ---- */
 .music-toggle {
-  position: fixed; top: 14px; left: 14px; z-index: 65; width: 42px; height: 42px;
+  position: fixed; top: 14px; left: 14px; z-index: 85; width: 42px; height: 42px;
   border-radius: 50%; padding: 0; font-size: 1.15rem; background: #1d2046;
   border: 1px solid #3a3e80; box-shadow: 0 6px 18px rgba(0,0,0,.4);
 }
