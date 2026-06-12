@@ -20,7 +20,7 @@ const DEFAULT_SETTINGS = {
   answerLang: 'en',
   rounds: 5,
   roundSeconds: 45,
-  revealSeconds: 15,
+  revealSeconds: 20,
   difficulty: 2,
   visibility: 'public', // 'public' (listed in the browser) | 'private' (code only)
   previewWaves: true, // let players see/compare waveforms before submitting

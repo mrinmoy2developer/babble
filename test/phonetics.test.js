@@ -48,4 +48,10 @@ const a = g2p('hello', 'en');
 const b = g2p('hallo', 'en');
 ok('score is symmetric', score(a, b) === score(b, a));
 
+// mixed-script: a Bengali+Latin guess decodes both runs (and ignores spaces)
+const mixed = g2p('বাট ball', 'mixed');
+ok('mixed script yields phonemes from both runs', mixed.length >= 4);
+ok('mixed "ball" run still has an l', g2p('xyz ball', 'mixed').includes('l'));
+ok('pure-latin in mixed == english decoder', g2p('cat', 'mixed').join('') === g2p('cat', 'en').join(''));
+
 console.log(`\n${passed} checks passed.`);

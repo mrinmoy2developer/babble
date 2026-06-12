@@ -15,6 +15,7 @@ const { Server } = require('socket.io');
 const { Room, makeCode } = require('./src/game');
 const { g2p } = require('./src/phonetics');
 const { synthPhonemesB64, backendName, warmup } = require('./src/tts');
+const stats = require('./src/stats');
 
 const app = express();
 const server = http.createServer(app);
@@ -41,7 +42,15 @@ function broadcastLobby(room) {
   io.to(room.code).emit('room:update', room.publicState());
 }
 
+function broadcastStats() {
+  io.emit('stats', { ...stats.get(), online: io.engine.clientsCount });
+}
+
 io.on('connection', (socket) => {
+  stats.addVisitor();
+  socket.emit('stats', { ...stats.get(), online: io.engine.clientsCount });
+  broadcastStats();
+
   socket.on('room:create', ({ name }, ack) => {
     let code = makeCode();
     while (rooms.has(code)) code = makeCode();
@@ -76,7 +85,7 @@ io.on('connection', (socket) => {
 
   socket.on('game:start', () => {
     const room = currentRoom(socket);
-    if (room) room.start(socket.id);
+    if (room && room.start(socket.id)) { stats.addGame(); broadcastStats(); }
   });
 
   socket.on('guess:submit', ({ text }) => {
@@ -128,7 +137,7 @@ io.on('connection', (socket) => {
     ack({ audio: (await room.renderCurrentSlow()) || '' });
   });
 
-  socket.on('disconnect', () => leaveRoom(socket));
+  socket.on('disconnect', () => { leaveRoom(socket); broadcastStats(); });
   socket.on('room:leave', () => leaveRoom(socket));
 });
 

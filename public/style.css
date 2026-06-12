@@ -162,7 +162,11 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .wave {
   width: 100%; height: 46px; display: block;
   background: #0d0e22; border: 1px solid #2a2d63; border-radius: 8px; margin-top: 8px;
+  cursor: pointer; touch-action: none;
 }
+/* karaoke letter shading while the pronunciation plays */
+.kchar { transition: color 0.08s ease, text-shadow 0.08s ease; }
+.kchar.lit { color: var(--accent2); text-shadow: 0 0 8px rgba(0, 212, 184, 0.65); }
 .wave.target { height: 60px; }
 #self-wave { height: 38px; opacity: 0.9; }
 .legend { color: var(--muted); font-size: 0.85rem; margin: 6px 0 0; }
@@ -196,6 +200,20 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .target-meta code { color: var(--accent2); background: #11132b; padding: 2px 8px; border-radius: 6px; }
 
 .foot { text-align: center; padding: 10px 16px 40px; min-height: 1.4em; }
+
+/* ---- local profile ---- */
+.profile { color: var(--muted); margin: 0 0 12px; font-size: 0.9rem; min-height: 1.1em; }
+.profile b { color: var(--accent2); }
+
+/* ---- global stats ---- */
+.global-stats {
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  margin-top: 20px; color: var(--muted); font-size: 0.9rem;
+}
+.global-stats span { background: #14162f; border: 1px solid #2c2f63; border-radius: 999px; padding: 6px 14px; }
+.global-stats b { color: var(--accent2); font-variant-numeric: tabular-nums; }
+.global-stats b.bump { animation: statBump 0.4s ease; }
+@keyframes statBump { 0% { transform: scale(1); } 40% { transform: scale(1.35); color: var(--warn); } 100% { transform: scale(1); } }
 
 /* ---- public lobby browser ---- */
 .public-lobbies { margin-top: 22px; border-top: 1px solid #2c2f63; padding-top: 14px; }

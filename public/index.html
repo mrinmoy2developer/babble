@@ -53,6 +53,7 @@
     <!-- JOIN -->
     <section id="screen-join" class="screen active card">
       <h2>Play</h2>
+      <p id="profile" class="profile"></p>
       <label>Your name
         <input id="name-input" maxlength="20" placeholder="e.g. Ada" autocomplete="off" />
       </label>
@@ -65,6 +66,12 @@
         <button id="btn-join">Join</button>
       </div>
       <p id="join-error" class="error"></p>
+
+      <div id="global-stats" class="global-stats">
+        <span><b id="stat-online">–</b> online now</span>
+        <span><b id="stat-games">–</b> games played</span>
+        <span><b id="stat-visitors">–</b> visitors</span>
+      </div>
 
       <div class="public-lobbies">
         <div class="pl-head">
@@ -105,6 +112,7 @@
               <option value="en">English</option>
               <option value="bn">Bengali (বাংলা)</option>
               <option value="es">Spanish</option>
+              <option value="mixed">Mixed — English + Bengali (বাংলা)</option>
             </select>
           </label>
 
@@ -119,8 +127,8 @@
             <label class="adv">Seconds / round <output id="secs-out">45</output>
               <input id="secs" type="range" min="10" max="180" step="5" value="45" />
             </label>
-            <label class="adv">Reveal seconds <output id="reveal-out">15</output>
-              <input id="reveal" type="range" min="5" max="60" step="1" value="15" />
+            <label class="adv">Reveal seconds <output id="reveal-out">20</output>
+              <input id="reveal" type="range" min="5" max="60" step="1" value="20" />
             </label>
             <label class="adv">Difficulty (word length) <output id="diff-out">2</output>
               <input id="diff" type="range" min="1" max="5" value="2" />

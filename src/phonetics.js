@@ -245,6 +245,35 @@ function banglaG2P(text) {
   return collapse(out);
 }
 
+// Which script a character belongs to, so a mixed-script guess can be decoded
+// run-by-run with the right rules (e.g. "টেস্টtest" -> bengali run + latin run).
+function scriptOf(ch) {
+  const c = ch.codePointAt(0);
+  if (c >= 0x0980 && c <= 0x09ff) return 'bn'; // Bengali block
+  if ((c >= 0x41 && c <= 0x5a) || (c >= 0x61 && c <= 0x7a)) return 'en'; // Latin
+  return 'other';
+}
+
+/**
+ * Decode a guess that mixes scripts (e.g. Bengali + English). Each maximal
+ * same-script run is decoded with its own rules, then concatenated.
+ * Note: hanzi/CJK have no spelling-to-sound rule here and are skipped.
+ */
+function mixedG2P(text) {
+  const out = [];
+  let i = 0;
+  while (i < text.length) {
+    const s = scriptOf(text[i]);
+    if (s === 'other') { i++; continue; }
+    let j = i;
+    while (j < text.length && scriptOf(text[j]) === s) j++;
+    const run = text.slice(i, j);
+    out.push(...(s === 'bn' ? banglaG2P(run) : englishG2P(run)));
+    i = j;
+  }
+  return collapse(out);
+}
+
 const DECODERS = {
   en: englishG2P,
   english: englishG2P,
@@ -252,6 +281,7 @@ const DECODERS = {
   bengali: banglaG2P,
   es: romanizedG2P,
   spanish: romanizedG2P,
+  mixed: mixedG2P,
   default: romanizedG2P,
 };
 

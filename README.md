@@ -70,8 +70,9 @@ with `BABBLE_TTS=piper|say|espeak`.
 # 1. install piper + download one or more voices into a folder (medium ≈ natural)
 python3 -m venv ~/piper && ~/piper/bin/pip install piper-tts
 mkdir -p ~/piper-voices && cd ~/piper-voices
-~/piper/bin/python -m piper.download_voices en_US-amy-medium
-~/piper/bin/python -m piper.download_voices en_GB-cori-high      # add as many as you like
+for v in en_US-amy-medium en_GB-cori-high en_US-lessac-medium en_GB-alan-medium en_US-ryan-high; do
+  ~/piper/bin/python -m piper.download_voices "$v"        # 5 voices to choose from
+done
 
 # 2. point Babble at the folder
 export PIPER_VOICES_DIR=~/piper-voices
@@ -177,7 +178,7 @@ the target phonemes until the reveal.
 | Setting | Meaning |
 |---|---|
 | Word sources | Which of the **19 packs** the engine draws from — Gibberish, real-language flavours (Japanese, Italian, German, Bengali, Spanish, French, Russian, Arabic, Polynesian, Korean, Hindi, Swahili, Greek, Turkish, Mandarin, Nordic) and fantasy (Elvish, Orcish) |
-| Answer language | Which decoder scores your guesses (English / Bengali / Spanish) |
+| Answer language | Which decoder scores your guesses (English / Bengali / Spanish / **Mixed** English+Bengali) |
 | Voice | Which Piper voice speaks the words (shown when piper voices are installed) |
 | Rounds | 1–20 |
 | Seconds / round | 10–180 |
@@ -197,8 +198,14 @@ visibility and the preview toggle.
 - **Clock ticks** in the final 10 seconds (faster in the last 5).
 - **Reveal:** the host can hit **Next round ▶** to skip the countdown.
 - **Win:** confetti + a victory fanfare on the final standings.
+- **Karaoke playback:** every waveform has a **draggable playhead** (scrub to any
+  point) and the spelling's letters **shade in sync** as the word is pronounced.
+- **Mixed scripts:** the "Mixed" answer language scores guesses that blend Bengali
+  and English (e.g. `বাট ball`), decoding each script run with its own rules.
 
-All sound effects are synthesized in the browser (Web Audio) — no asset files.
+The join screen shows live **global stats** (online now · games played · visitors,
+persisted across restarts) and a small **local profile** (games, best score, wins)
+kept in your browser. All sound effects are synthesized in the browser (Web Audio).
 
 ## Architecture
 
@@ -210,6 +217,7 @@ src/phonetics.js       text→sound decoder (g2p) + sound comparison (score)
 src/tts.js             server-side speech synth (macOS say / espeak-ng)
 src/words.js           the automated word/gibberish generator
 src/game.js            Room + round state machine (lobby → rounds → results)
+src/stats.js           persistent global counters (visitors, games played)
 scripts/piper_server.py  persistent Piper sidecar (keeps voice models resident)
 public/                index.html · style.css · client.js (Web Audio playback + waveforms)
 assets/                README graphics (make-graphics.js) + screenshots (screenshot.js)

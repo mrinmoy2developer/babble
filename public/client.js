@@ -22,6 +22,14 @@
 
   // ----- local state -------------------------------------------------------
   const me = { id: null, name: localStorage.getItem('babble.name') || '' };
+  // a small persistent profile (offline; "Sign in with Google" could sync this later)
+  const profile = (() => { try { return JSON.parse(localStorage.getItem('babble.profile')) || {}; } catch (_) { return {}; } })();
+  function renderProfile() {
+    const el = $('profile');
+    if (profile.games) {
+      el.innerHTML = `👤 <b>${escapeHtml(me.name || 'You')}</b> · ${profile.games} game${profile.games > 1 ? 's' : ''} played · best <b>${profile.best || 0}</b> · 🏆 ${profile.wins || 0} win${profile.wins === 1 ? '' : 's'}`;
+    } else { el.textContent = ''; }
+  }
   let state = null; // last room snapshot
   let current = { audio: '', buffer: null }; // current round target
   let answerLang = 'en';
@@ -30,6 +38,7 @@
   let lastTickSec = -1;
   let paused = false;
   if (me.name) $('name-input').value = me.name;
+  renderProfile();
 
   const amIHost = () => !!(state && state.hostId === me.id);
 
@@ -92,6 +101,75 @@
       g.lineTo(x + 0.5, mid + max * mid * 0.92);
     }
     g.stroke(); g.globalAlpha = 1;
+  }
+
+  // ----- a player with a scrubbable playhead + karaoke letter shading ------
+  let activeViz = null;
+  function spanLetters(text) {
+    return [...String(text)].map((c) =>
+      c === ' ' ? ' ' : `<span class="kchar">${escapeHtml(c)}</span>`).join('');
+  }
+  function makePlayer(buffer, canvas, { ghost = null, letters = [] } = {}) {
+    if (!buffer || !canvas) return { play() {}, stop() {} };
+    // swap in a fresh node so reused canvases (orig/target) don't stack listeners
+    const fresh = canvas.cloneNode(false);
+    canvas.replaceWith(fresh);
+    canvas = fresh;
+    const dpr = window.devicePixelRatio || 1;
+    const dur = buffer.duration;
+    let src = null, t0 = 0, off = 0, raf = null, playing = false, scrub = null;
+
+    const drawStatic = () => {
+      drawWave(canvas, ghost, { color: '#7c5cff', alpha: 0.28, clear: true });
+      drawWave(canvas, buffer, { color: '#00d4b8', alpha: 1, clear: false });
+    };
+    const drawAt = (t) => {
+      drawStatic();
+      const g = canvas.getContext('2d');
+      const x = Math.max(0, Math.min(1, t / dur)) * canvas.width;
+      g.strokeStyle = '#ffb454'; g.lineWidth = 2 * dpr;
+      g.beginPath(); g.moveTo(x, 0); g.lineTo(x, canvas.height); g.stroke();
+      const frac = t / dur;
+      letters.forEach((el, i) => el.classList.toggle('lit', (i + 0.5) / letters.length <= frac));
+    };
+    const reset = () => { letters.forEach((el) => el.classList.remove('lit')); drawStatic(); };
+    const stop = () => {
+      if (src) { try { src.stop(); } catch (_) {} src = null; }
+      playing = false; if (raf) cancelAnimationFrame(raf);
+    };
+    const frame = () => {
+      if (!playing) return;
+      const t = off + (ctx().currentTime - t0);
+      if (t >= dur) { drawAt(dur); stop(); setTimeout(reset, 450); return; }
+      drawAt(t); raf = requestAnimationFrame(frame);
+    };
+    const play = (offset = 0) => {
+      if (activeViz && activeViz !== api) activeViz.stop();
+      activeViz = api;
+      stop();
+      const c = ctx(); if (!c) return;
+      src = c.createBufferSource(); src.buffer = buffer; src.connect(c.destination);
+      off = Math.max(0, Math.min(dur, offset)); t0 = c.currentTime;
+      src.start(0, off); playing = true; frame();
+    };
+
+    // freely scrollable playhead: drag to set position, release to play from there
+    const posOf = (e) => {
+      const r = canvas.getBoundingClientRect();
+      return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * dur;
+    };
+    let dragging = false;
+    canvas.style.cursor = 'pointer';
+    canvas.addEventListener('pointerdown', (e) => {
+      dragging = true; try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      stop(); scrub = posOf(e); drawAt(scrub);
+    });
+    canvas.addEventListener('pointermove', (e) => { if (dragging) { scrub = posOf(e); drawAt(scrub); } });
+    canvas.addEventListener('pointerup', () => { if (dragging) { dragging = false; play(scrub || 0); } });
+
+    const api = { play, stop, drawStatic };
+    drawStatic();
+    return api;
   }
 
   // ----- sound effects (synthesised, no asset files) ----------------------
@@ -195,7 +273,7 @@
   };
   $('code-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-join').click(); });
 
-  const LANG_LABEL = { en: 'English', bn: 'Bengali', es: 'Spanish' };
+  const LANG_LABEL = { en: 'English', bn: 'Bengali', es: 'Spanish', mixed: 'English + Bengali' };
   function refreshRooms() {
     socket.emit('rooms:list', {}, (res) => {
       const list = (res && res.rooms) || [];
@@ -352,8 +430,10 @@
   $('btn-resume').onclick = () => socket.emit('game:resume');
 
   // ----- play --------------------------------------------------------------
-  $('btn-replay').onclick = () => playB64(current.audio);
-  $('btn-replay-target').onclick = () => playB64(current.audio);
+  let origPlayer = null; // play-screen "Original" waveform player (when preview on)
+  const playWord = () => { if (origPlayer) origPlayer.play(0); else playB64(current.audio); };
+  $('btn-replay').onclick = playWord;
+  $('btn-replay-target').onclick = playWord;
   $('btn-slow').onclick = () => socket.emit('word:slow', {}, (res) => { if (res && res.audio) playB64(res.audio); });
 
   $('btn-hear-self').onclick = () => {
@@ -361,8 +441,8 @@
     if (!text) return;
     socket.emit('guess:preview', { text }, async (res) => {
       if (!res || !res.audio) return;
-      playB64(res.audio);
       if (previewWaves) await addTry(text, res.audio);
+      else playB64(res.audio);
     });
   };
 
@@ -374,19 +454,16 @@
     li.className = 'try';
     li.innerHTML =
       `<button class="play-btn" title="Replay">▶</button>` +
-      `<span class="txt">${escapeHtml(text)}</span>` +
+      `<span class="txt">${spanLetters(text)}</span>` +
       `<button class="use">✓ Submit</button>` +
       `<canvas class="wave"></canvas>`;
-    li.querySelector('.play-btn').onclick = () => playB64(audio);
-    li.querySelector('.use').onclick = () => {
-      $('guess-input').value = text;
-      submitGuess(text);
-    };
+    li.querySelector('.use').onclick = () => { $('guess-input').value = text; submitGuess(text); };
     list.prepend(li);
-    const canvas = li.querySelector('.wave');
     const gbuf = await decode(audio).catch(() => null);
-    drawWave(canvas, current.buffer, { color: '#7c5cff', alpha: 0.28, clear: true });
-    if (gbuf) drawWave(canvas, gbuf, { color: '#00d4b8', alpha: 1, clear: false });
+    const player = makePlayer(gbuf, li.querySelector('.wave'),
+      { ghost: current.buffer, letters: [...li.querySelectorAll('.kchar')] });
+    li.querySelector('.play-btn').onclick = () => player.play(0);
+    player.play(0); // play + animate the moment you add it
   }
 
   function submitGuess(text) {
@@ -416,6 +493,29 @@
     timerInt = setInterval(tick, 250);
   }
 
+  // ----- global stats (animated count-up) ---------------------------------
+  const statShown = { online: 0, games: 0, visitors: 0 };
+  function animateStat(id, key, to) {
+    const el = $(id);
+    const from = statShown[key];
+    if (to === from) return;
+    if (to > from) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+    const steps = Math.min(20, Math.abs(to - from));
+    let i = 0;
+    const tick = () => {
+      i += 1;
+      el.textContent = Math.round(from + (to - from) * (i / steps)).toLocaleString();
+      if (i < steps) requestAnimationFrame(tick);
+      else { el.textContent = to.toLocaleString(); statShown[key] = to; }
+    };
+    if (steps > 0) tick(); else { el.textContent = to.toLocaleString(); statShown[key] = to; }
+  }
+  socket.on('stats', (d) => {
+    animateStat('stat-online', 'online', d.online || 0);
+    animateStat('stat-games', 'games', d.games || 0);
+    animateStat('stat-visitors', 'visitors', d.visitors || 0);
+  });
+
   // ----- socket events -----------------------------------------------------
   socket.on('connect', () => { me.id = socket.id; refreshRooms(); });
   socket.on('room:joined', (s) => { me.id = s.you; renderLobby(s); });
@@ -441,14 +541,21 @@
     $('submitted-count').textContent = '';
 
     // preview area
+    if (origPlayer) origPlayer.stop();
+    origPlayer = null;
     $('preview-area').classList.toggle('on', previewWaves);
     $('tries-list').innerHTML = '<li class="tries-empty">Type a guess and press “Hear my guess” to stack a try here.</li>';
     show('play');
     $('guess-input').focus();
     startTimer(d.deadline);
-    setTimeout(() => playB64(d.audio), 250);
 
-    if (previewWaves) { current.buffer = await decode(d.audio).catch(() => null); drawWave($('orig-wave'), current.buffer, { color: '#00d4b8' }); }
+    if (previewWaves) {
+      current.buffer = await decode(d.audio).catch(() => null);
+      origPlayer = makePlayer(current.buffer, $('orig-wave'), {});
+      setTimeout(playWord, 250); // auto-play once, with the moving playhead
+    } else {
+      setTimeout(() => playB64(d.audio), 250);
+    }
   });
 
   socket.on('guess:locked', (d) => {
@@ -474,10 +581,13 @@
 
   socket.on('round:reveal', async (d) => {
     clearInterval(timerInt);
+    if (origPlayer) origPlayer.stop();
+    origPlayer = null;
     current = { audio: d.target.audio, buffer: null };
     $('reveal-round').textContent = d.round;
     $('reveal-source').textContent = d.target.source;
-    $('reveal-phon').textContent = d.target.phonemes.join(' ');
+    // phoneme tokens as karaoke letters
+    $('reveal-phon').innerHTML = d.target.phonemes.map((p) => `<span class="kchar">${p}</span>`).join(' ');
     sfx.ding();
 
     const ul = $('reveal-list');
@@ -488,11 +598,10 @@
         `<span class="rank">${medal(i)}</span>` +
         `<button class="play-btn" ${r.audio ? '' : 'disabled'} title="Play guess">▶</button>` +
         `<span class="who">${escapeHtml(r.name)}${r.id === me.id ? ' (you)' : ''}` +
-        `<span class="guessed"> — “${escapeHtml(r.guess || '—')}”</span></span>` +
+        `<span class="guessed"> — “${r.guess ? spanLetters(r.guess) : '—'}”</span></span>` +
         `<span class="pts">+${r.points}</span>` +
         `<span class="total">${r.total} pts</span>` +
         `<canvas class="wave"></canvas>`;
-      li.querySelector('.play-btn').onclick = () => playB64(r.audio);
       ul.appendChild(li);
       return { li, r };
     });
@@ -511,13 +620,17 @@
       if (left <= 0) { clearInterval(timerInt); showLoading(); }
     }, 1000);
 
+    // build players: target (karaoke over phonemes) + each guess (over its letters)
     const targetBuf = await decode(d.target.audio);
-    drawWave($('target-wave'), targetBuf, { color: '#00d4b8' });
+    const targetLetters = [...$('reveal-phon').querySelectorAll('.kchar')];
+    const targetPlayer = makePlayer(targetBuf, $('target-wave'), { letters: targetLetters });
+    $('btn-replay-target').onclick = () => targetPlayer.play(0);
     for (const { li, r } of rows) {
-      const canvas = li.querySelector('.wave');
       const guessBuf = r.audio ? await decode(r.audio).catch(() => null) : null;
-      drawWave(canvas, targetBuf, { color: '#7c5cff', alpha: 0.28, clear: true });
-      if (guessBuf) drawWave(canvas, guessBuf, { color: '#00d4b8', alpha: 1, clear: false });
+      const player = makePlayer(guessBuf, li.querySelector('.wave'),
+        { ghost: targetBuf, letters: [...li.querySelectorAll('.kchar')] });
+      const btn = li.querySelector('.play-btn');
+      if (guessBuf) btn.onclick = () => player.play(0);
     }
   });
   $('btn-next-round').onclick = () => { showLoading(); socket.emit('round:next'); };
@@ -525,6 +638,16 @@
   socket.on('game:over', (d) => {
     clearInterval(timerInt);
     hideLoading();
+    // update the local persistent profile
+    const mine = d.leaderboard.find((p) => p.id === me.id);
+    if (mine) {
+      profile.games = (profile.games || 0) + 1;
+      profile.total = (profile.total || 0) + mine.score;
+      profile.best = Math.max(profile.best || 0, mine.score);
+      if (d.leaderboard[0] && d.leaderboard[0].id === me.id) profile.wins = (profile.wins || 0) + 1;
+      localStorage.setItem('babble.profile', JSON.stringify(profile));
+      renderProfile();
+    }
     const ul = $('final-list');
     ul.innerHTML = '';
     d.leaderboard.forEach((p, i) => {
