@@ -232,6 +232,7 @@ function generateWord({ sources, difficulty = 2 } = {}) {
     voice: pack.voice,
     source: pack.label,
     sourceKey: key,
+    flag: FLAGS[key] || 'dice',
     syllables,
   };
 }

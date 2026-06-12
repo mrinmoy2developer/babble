@@ -55,6 +55,12 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- animated multilingual letters drifting across the background -->
+  <canvas id="bg-letters" aria-hidden="true"></canvas>
+
+  <!-- music toggle -->
+  <button id="music-toggle" class="music-toggle" title="Music on/off">🎵</button>
+
   <!-- drifting background bubbles -->
   <div id="bg-bubbles" aria-hidden="true">
     <span style="--x:8%;--sz:70px;--d:0s;--t:22s"></span>
@@ -225,7 +231,7 @@
           <button id="btn-slow" class="ghost">🐢 Slower</button>
         </div>
         <p class="listen-hint">Replay as many times as you like. <span id="syl-hint"></span></p>
-        <p id="think-word" class="thinking" hidden><span class="baby">👶</span> figuring out how to say it…</p>
+        <p id="think-word" class="thinking" hidden><span class="baby">👶</span> babbling it out slower…</p>
       </div>
 
       <form id="guess-form" class="guess">
@@ -235,7 +241,7 @@
           <button type="submit" class="primary">Lock in guess</button>
           <button type="button" id="btn-hear-self" class="ghost">🔊 Hear my guess</button>
         </div>
-        <p id="think-guess" class="thinking" hidden><span class="baby">👶</span> sounding out your spelling…</p>
+        <p id="think-guess" class="thinking" hidden><span class="baby">👶</span> babbling the letters…</p>
       </form>
       <p id="guess-status" class="hint"></p>
       <p id="submitted-count" class="count"></p>

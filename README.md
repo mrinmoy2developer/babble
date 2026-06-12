@@ -206,6 +206,10 @@ visibility and the preview toggle.
 - **Chat & invites:** a lobby chat plus a floating in-game chat widget (with unread
   badge), and a **🔗 Invite** button that copies a deep link (`?room=CODE`) friends
   can click to drop straight into your lobby.
+- **Living background:** colourful letters from every game language drift across the
+  menu screens in curved paths — same-script letters trail each other and trains
+  bump at crossings — over a playful synthesized melody (🎵 toggle, top-left). Both
+  go quiet during a round so the word audio has the stage.
 - **Mixed scripts:** the "Mixed" answer language scores guesses that blend Bengali
   and English (e.g. `বাট ball`), decoding each script run with its own rules.
 

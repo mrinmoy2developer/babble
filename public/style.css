@@ -392,6 +392,17 @@ button.small { padding: 6px 12px; font-size: 0.85rem; }
 @keyframes eq { 0%, 100% { height: 16px; } 50% { height: 64px; } }
 #loading-msg { color: var(--ink); font-size: 1.1rem; }
 
+/* ---- animated multilingual letters ---- */
+#bg-letters { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+
+/* ---- music toggle ---- */
+.music-toggle {
+  position: fixed; top: 14px; left: 14px; z-index: 65; width: 42px; height: 42px;
+  border-radius: 50%; padding: 0; font-size: 1.15rem; background: #1d2046;
+  border: 1px solid #3a3e80; box-shadow: 0 6px 18px rgba(0,0,0,.4);
+}
+.music-toggle.off { opacity: 0.55; filter: grayscale(1); }
+
 /* ---- drifting background bubbles ---- */
 #bg-bubbles { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
 #bg-bubbles span {

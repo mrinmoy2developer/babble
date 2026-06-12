@@ -20,6 +20,9 @@
     const inGame = ['play', 'reveal', 'over'].includes(name);
     $('chat-widget').classList.toggle('on', inGame);
     if (!inGame) $('chat-panel').hidden = true;
+    // background letters + melody on the menu screens, quiet during play
+    const menu = ['join', 'lobby', 'over'].includes(name);
+    if (menu) { bgLetters.start(); if (music.on) music.start(); } else { bgLetters.stop(); music.stop(); }
     syncHostControls();
   }
 
@@ -253,6 +256,137 @@
     })(start);
   }
 
+  // ----- animated multilingual background letters --------------------------
+  // colourful letters from every game language drift in curved paths; members of
+  // the same script trail each other like a snake, and trains bump at crossings.
+  const SCRIPTS = [
+    { c: '#ff6b81', g: 'ABRKWMQ' },          // latin
+    { c: '#00d4b8', g: 'অআকখবলমন' },         // bengali
+    { c: '#ffb454', g: 'あいうねこさカナ' },    // japanese
+    { c: '#8a7bff', g: 'αβγδΩΣΦΨ' },          // greek
+    { c: '#3ddc97', g: 'ЯЖФДБГИ' },           // cyrillic
+    { c: '#ff9bd6', g: 'كلمنهعص' },           // arabic
+    { c: '#5ad1ff', g: '가나다라한글' },         // korean
+    { c: '#ffd24d', g: '你好字文中語' },         // chinese
+    { c: '#b491ff', g: 'कखगअआइउ' },           // devanagari
+  ];
+  const bgLetters = {
+    running: false, raf: null, trains: [], W: 0, H: 0, dpr: 1, canvas: null, g: null,
+    init() {
+      this.canvas = $('bg-letters');
+      if (!this.canvas) return;
+      this.g = this.canvas.getContext('2d');
+      this.resize();
+      window.addEventListener('resize', () => this.resize());
+    },
+    resize() {
+      this.dpr = Math.min(2, window.devicePixelRatio || 1);
+      this.W = this.canvas.width = Math.floor(innerWidth * this.dpr);
+      this.H = this.canvas.height = Math.floor(innerHeight * this.dpr);
+      this.spawn();
+    },
+    spawn() {
+      this.trains = [];
+      const count = Math.max(9, Math.min(16, Math.round(innerWidth / 95)));
+      for (let i = 0; i < count; i++) {
+        const s = SCRIPTS[i % SCRIPTS.length];
+        this.trains.push({
+          x: Math.random() * this.W, y: Math.random() * this.H,
+          a: Math.random() * Math.PI * 2, speed: (0.5 + Math.random() * 0.8) * this.dpr,
+          phase: Math.random() * 100, size: (22 + Math.random() * 16) * this.dpr,
+          color: s.c, glyphs: [...s.g], members: 3 + Math.floor(Math.random() * 4), hist: [], flash: 0,
+        });
+      }
+    },
+    start() { if (this.running || !this.g) return; this.running = true; this.frame(); },
+    stop() { this.running = false; if (this.raf) cancelAnimationFrame(this.raf); if (this.g) this.g.clearRect(0, 0, this.W, this.H); },
+    frame() {
+      if (!this.running) return;
+      const g = this.g; const t = performance.now();
+      g.clearRect(0, 0, this.W, this.H);
+      // bumps between train leaders at crossings
+      for (let i = 0; i < this.trains.length; i++) {
+        for (let j = i + 1; j < this.trains.length; j++) {
+          const A = this.trains[i], B = this.trains[j];
+          if (Math.hypot(A.x - B.x, A.y - B.y) < (A.size + B.size) * 0.5) {
+            A.a += 0.6; B.a -= 0.6; A.flash = B.flash = 9;
+          }
+        }
+      }
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      for (const tr of this.trains) {
+        tr.a += Math.sin(t * 0.0006 + tr.phase) * 0.03 + (Math.random() - 0.5) * 0.02;
+        tr.x += Math.cos(tr.a) * tr.speed; tr.y += Math.sin(tr.a) * tr.speed;
+        const m = tr.size;
+        if (tr.x < -m) tr.x += this.W + 2 * m; else if (tr.x > this.W + m) tr.x -= this.W + 2 * m;
+        if (tr.y < -m) tr.y += this.H + 2 * m; else if (tr.y > this.H + m) tr.y -= this.H + 2 * m;
+        tr.hist.unshift({ x: tr.x, y: tr.y });
+        const gap = 6;
+        if (tr.hist.length > tr.members * gap) tr.hist.length = tr.members * gap;
+        if (tr.flash > 0) tr.flash--;
+        for (let k = tr.members - 1; k >= 0; k--) {
+          const p = tr.hist[Math.min(tr.hist.length - 1, k * gap)];
+          if (!p) continue;
+          g.globalAlpha = Math.max(0.08, (0.8 - k * 0.12) * (tr.flash ? 1 : 0.7));
+          g.fillStyle = tr.color;
+          g.font = `700 ${tr.size * (k === 0 && tr.flash ? 1.35 : 1)}px "Fredoka", system-ui, "Noto Sans", sans-serif`;
+          g.fillText(tr.glyphs[k % tr.glyphs.length], p.x, p.y);
+        }
+      }
+      g.globalAlpha = 1;
+      this.raf = requestAnimationFrame(() => this.frame());
+    },
+  };
+
+  // ----- playful background melody (synthesised, toggleable) ---------------
+  const music = {
+    on: localStorage.getItem('babble.music') !== 'off',
+    playing: false, timer: null, step: 0, master: null,
+    melody: [523.25, 659.25, 783.99, 880, 783.99, 659.25, 587.33, 659.25, 523.25, 659.25, 783.99, 1046.5],
+    bass: [130.81, 130.81, 174.61, 196.0],
+    start() {
+      const c = ctx();
+      if (!c || this.playing || !this.on) return;
+      this.playing = true; this.step = 0;
+      this.master = c.createGain(); this.master.gain.value = 0; this.master.connect(c.destination);
+      this.master.gain.linearRampToValueAtTime(0.05, c.currentTime + 1.2);
+      this.tick();
+    },
+    tick() {
+      if (!this.playing) return;
+      const c = ctx(); const t = c.currentTime; const beat = 0.32;
+      this.note(this.melody[this.step % this.melody.length], t, beat * 0.9, 'triangle', 0.5);
+      if (this.step % 2 === 0) this.note(this.bass[Math.floor(this.step / 2) % this.bass.length], t, beat * 1.7, 'sine', 0.55);
+      this.step += 1;
+      this.timer = setTimeout(() => this.tick(), beat * 1000);
+    },
+    note(freq, t, dur, type, g) {
+      const c = ctx(); const o = c.createOscillator(), ga = c.createGain();
+      o.type = type; o.frequency.value = freq; o.connect(ga); ga.connect(this.master);
+      ga.gain.setValueAtTime(0, t); ga.gain.linearRampToValueAtTime(g, t + 0.02);
+      ga.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.start(t); o.stop(t + dur + 0.03);
+    },
+    stop() {
+      this.playing = false; clearTimeout(this.timer);
+      if (this.master) { try { this.master.gain.linearRampToValueAtTime(0, ctx().currentTime + 0.3); } catch (_) {} }
+    },
+    toggle() {
+      this.on = !this.on;
+      localStorage.setItem('babble.music', this.on ? 'on' : 'off');
+      updateMusicBtn();
+      if (this.on) this.start(); else this.stop();
+    },
+  };
+  function updateMusicBtn() {
+    const b = $('music-toggle');
+    b.textContent = music.on ? '🎵' : '🔇';
+    b.classList.toggle('off', !music.on);
+  }
+  $('music-toggle').onclick = () => music.toggle();
+  updateMusicBtn();
+  bgLetters.init();
+
   // ----- toasts ------------------------------------------------------------
   function toast(html) {
     const t = document.createElement('div');
@@ -269,6 +403,8 @@
     const intro = $('intro');
     intro.classList.add('fade-out');
     setTimeout(() => intro.classList.remove('on', 'fade-out'), 500);
+    bgLetters.start();
+    music.start();
     // arrived via an invite link with a name already set? jump straight in.
     if (inviteCode && me.name) joinByCode(inviteCode);
   };
@@ -627,7 +763,7 @@
     $('paused-overlay').classList.remove('on');
     $('round-now').textContent = d.round;
     $('round-total').textContent = d.totalRounds;
-    $('source-pill').textContent = '🌍 ' + d.source;
+    $('source-pill').innerHTML = `${flagHtml(d.flag)} ${escapeHtml(d.source)}`;
     $('syl-hint').textContent = `~${d.syllables} syllable${d.syllables > 1 ? 's' : ''}.`;
     $('guess-label').textContent = `Spell what you heard (${LANG_LABEL[answerLang] || answerLang})`;
     $('guess-input').value = '';
@@ -681,7 +817,7 @@
     origPlayer = null;
     current = { audio: d.target.audio, buffer: null };
     $('reveal-round').textContent = d.round;
-    $('reveal-source').textContent = d.target.source;
+    $('reveal-source').innerHTML = `${flagHtml(d.target.flag)} ${escapeHtml(d.target.source)}`;
     // phoneme tokens as karaoke letters
     $('reveal-phon').innerHTML = d.target.phonemes.map((p) => `<span class="kchar">${p}</span>`).join(' ');
     sfx.ding();

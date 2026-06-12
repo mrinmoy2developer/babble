@@ -140,6 +140,7 @@ class Room {
       totalRounds: this.settings.rounds,
       audio: this.word.audio, // base64 WAV, the only way to know the word
       source: this.word.source,
+      flag: this.word.flag,
       answerLang: this.settings.answerLang,
       previewWaves: this.settings.previewWaves,
       deadline: this.deadline,
@@ -255,6 +256,7 @@ class Room {
         phonemes: target,
         audio: this.word.audio,
         source: this.word.source,
+        flag: this.word.flag,
       },
       results,
       leaderboard: this.leaderboard(),
