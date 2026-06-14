@@ -27,82 +27,19 @@
   }
 
   // ----- local state -------------------------------------------------------
-  // Invented "rune" avatars: squiggly/edgy glyphs we draw ourselves — not a single
-  // character from any real alphabet. Each id deterministically maps to the same
-  // SVG path (seeded RNG), so everyone renders a player's avatar identically.
-  // Colour is chosen separately. Stored as "g<id>|#rrggbb".
+  // Invented "rune" avatars: a hand-designed alien alphabet shipped as SVG image
+  // files in /assets/runes (see assets/make-runes.js). Each glyph is tinted to the
+  // player's chosen colour with a CSS mask, so colour stays a separate choice.
+  // Stored as "g<id>|#rrggbb".
   const COLORS = ['#ff6b81', '#00d4b8', '#ffb454', '#8a7bff', '#3ddc97', '#ff9bd6',
     '#5ad1ff', '#ffd24d', '#b491ff', '#ff5d73', '#36d399', '#7c5cff'];
-  const GLYPH_IDS = Array.from({ length: 36 }, (_, i) => 'g' + i);
+  const RUNE_COUNT = 24;
+  const GLYPH_IDS = Array.from({ length: RUNE_COUNT }, (_, i) => 'g' + i);
   const rand = (a) => a[Math.floor(Math.random() * a.length)];
-
-  function mulberry32(seed) {
-    let s = seed >>> 0;
-    return () => {
-      s = (s + 0x6D2B79F5) | 0;
-      let t = Math.imul(s ^ (s >>> 15), 1 | s);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-  // Draw one invented rune as a *deliberate* character: a single connected stroke
-  // that walks down a fixed 3×4 lattice (biased into a vertical stem), plus the
-  // script's shared motifs — an optional crossbar and round node-dots. Every glyph
-  // shares this lattice, stroke weight and vocabulary, so the set reads as one
-  // coherent alien alphabet rather than random scribbles.
-  const COLS = [30, 50, 70], ROWS = [18, 40, 62, 84];
-  const runeCache = new Map();
-  function runeGlyph(id) {
-    if (runeCache.has(id)) return runeCache.get(id);
-    const r = mulberry32((((parseInt(String(id).replace(/\D/g, ''), 10) || 0) + 1) * 2654435761) >>> 0);
-    const ri = (a, b) => a + Math.floor(r() * (b - a + 1));
-    const wpick = (items) => { let t = items.reduce((a, b) => a + b[1], 0), x = r() * t; for (const [v, w] of items) { x -= w; if (x <= 0) return v; } return items[items.length - 1][0]; };
-    const P = (c, j) => `${COLS[c]} ${ROWS[j]}`;
-
-    // main connected stroke — a walk that prefers to head downward (a stem)
-    let c = wpick([[0, 1], [1, 2], [2, 1]]);
-    let j = r() < 0.8 ? 0 : 1;
-    let d = `M${P(c, j)}`;
-    let pdc = 0, pdj = 0;
-    const steps = ri(3, 5);
-    for (let s = 0; s < steps; s++) {
-      const moves = [];
-      for (let dc = -1; dc <= 1; dc++) for (let dj = -1; dj <= 1; dj++) {
-        if (!dc && !dj) continue;
-        const nc = c + dc, nj = j + dj;
-        if (nc < 0 || nc > 2 || nj < 0 || nj > 3) continue;
-        if ((pdc || pdj) && dc === -pdc && dj === -pdj) continue; // no immediate backtrack
-        let w = 1;
-        if (!dc && dj === 1) w = 6;       // straight down (stem)
-        else if (dj === 1) w = 3;         // diagonal down
-        else if (!dj) w = 2;              // sideways
-        moves.push([[nc, nj, dc, dj], w]);
-      }
-      if (!moves.length) break;
-      const [nc, nj, dc, dj] = wpick(moves);
-      d += `L${P(nc, nj)}`;
-      c = nc; j = nj; pdc = dc; pdj = dj;
-    }
-    // shared motifs: a crossbar through the body and/or a short hook
-    if (r() < 0.45) { const cr = ri(1, 2); d += `M${P(0, cr)}L${P(2, cr)}`; }
-    if (r() < 0.33) { const a = ri(0, 1), b = ri(1, 3); d += `M${P(a, b)}L${P(a + 1, b - 1)}`; }
-    // round node-dots (terminals / diacritics)
-    const dots = [];
-    if (r() < 0.55) dots.push([COLS[wpick([[0, 1], [1, 1], [2, 1]])], ROWS[ri(0, 3)]]);
-    if (r() < 0.22) dots.push([COLS[ri(0, 2)], ROWS[ri(0, 3)]]);
-
-    const g = { d, dots };
-    runeCache.set(id, g);
-    return g;
-  }
-  function runeSvg(id, color) {
-    const g = runeGlyph(id);
-    const dots = g.dots.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="6" fill="${color}"/>`).join('');
-    return `<svg class="rune-svg" viewBox="0 0 100 100" aria-hidden="true">` +
-      `<path d="${g.d}" fill="none" stroke="${color}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>` +
-      dots + `</svg>`;
-  }
   const isRune = (g) => /^g\d+$/.test(g);
+  const runeUrl = (id) => `assets/runes/r${String(id).replace(/\D/g, '').padStart(2, '0')}.svg`;
+  // no quotes inside url() — these strings sit inside double-quoted style="" attrs
+  const runeMaskStyle = (id) => { const u = `url(${runeUrl(id)})`; return `-webkit-mask-image:${u};mask-image:${u}`; };
 
   function parseAvatar(a) {
     const m = String(a || '').match(/^(.+)\|(#[0-9a-fA-F]{6})$/);
@@ -134,7 +71,7 @@
   const avatarSpan = (a) => {
     const p = parseAvatar(a);
     if (p) {
-      if (isRune(p.glyph)) return `<span class="avatar rune">${runeSvg(p.glyph, p.color)}</span>`;
+      if (isRune(p.glyph)) return `<span class="avatar rune" style="color:${p.color};${runeMaskStyle(p.glyph)}"></span>`;
       return `<span class="avatar glyph" style="color:${p.color}">${escapeHtml(p.glyph)}</span>`; // legacy unicode
     }
     return a ? `<span class="avatar">${escapeHtml(a)}</span>` : ''; // legacy emoji
@@ -167,18 +104,15 @@
     GLYPH_IDS.forEach((id) => {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'ab-glyph'; b.dataset.glyph = id;
-      b.innerHTML = runeSvg(id, 'currentColor'); b.style.color = me.color;
+      b.innerHTML = `<span class="avatar rune" style="${runeMaskStyle(id)}"></span>`;
+      b.style.color = me.color; // the masked glyph inherits this via currentColor
       if (id === me.glyph) b.classList.add('sel');
       b.onclick = () => { me.glyph = id; commitAvatar(); };
       glyphs.appendChild(b);
     });
   }
   // paint a "current avatar" chip with the chosen rune + colour
-  function paintAvatarCur(el) {
-    el.style.color = me.color;
-    if (isRune(me.glyph)) el.innerHTML = runeSvg(me.glyph, 'currentColor');
-    else el.textContent = me.glyph;
-  }
+  function paintAvatarCur(el) { el.innerHTML = avatarSpan(me.avatar); }
   // apply the current glyph+colour everywhere and tell the room
   function commitAvatar() {
     me.avatar = composeAvatar(me.glyph, me.color);
