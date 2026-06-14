@@ -31,6 +31,13 @@
     '🐷', '🐔', '🦉', '🐢', '🦖', '👽', '🤖', '🐲', '🐝', '🦋', '🐺', '🐨'];
   const me = { id: null, name: localStorage.getItem('babble.name') || '',
     avatar: localStorage.getItem('babble.avatar') || AVATARS[Math.floor(Math.random() * AVATARS.length)] };
+  // a stable, public profile id so a player's stats follow them across games
+  function genPid() {
+    try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (_) {}
+    return 'p-' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+  }
+  me.pid = localStorage.getItem('babble.pid');
+  if (!me.pid) { me.pid = genPid(); localStorage.setItem('babble.pid', me.pid); }
 
   // circular flag for a language pack (ISO code -> image, special token -> emoji badge)
   function flagHtml(flag) {
@@ -106,12 +113,20 @@
     bufCache.set(b64, buf);
     return buf;
   }
+  // a single shared "simple playback" slot: starting a new sound cuts off the
+  // previous one, so mashing ▶ restarts the word instead of stacking copies.
+  let simpleSrc = null;
+  function stopSimple() { if (simpleSrc) { try { simpleSrc.stop(); } catch (_) {} simpleSrc = null; } }
   function playBuffer(buf) {
     const c = ctx();
     if (!c || !buf) return;
+    stopSimple();
+    if (activeViz) { activeViz.stop(); activeViz = null; } // also halt a waveform player
     const src = c.createBufferSource();
     src.buffer = buf;
     src.connect(c.destination);
+    src.onended = () => { if (simpleSrc === src) simpleSrc = null; };
+    simpleSrc = src;
     src.start();
   }
   async function playB64(b64) { try { playBuffer(await decode(b64)); } catch (_) {} }
@@ -180,6 +195,7 @@
       drawAt(t); raf = requestAnimationFrame(frame);
     };
     const play = (offset = 0) => {
+      stopSimple(); // don't let raw playback bleed under the waveform player
       if (activeViz && activeViz !== api) activeViz.stop();
       activeViz = api;
       stop();
@@ -606,6 +622,189 @@
   const inviteCode = (new URLSearchParams(location.search).get('room') || '').toUpperCase().slice(0, 4);
   if (inviteCode) $('code-input').value = inviteCode;
 
+  // ----- tiny canvas charts for the analytics page (no libraries) ----------
+  function chartBase(cv, height) {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const W = cv.clientWidth || 560;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(height * dpr);
+    const g = cv.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, W, height);
+    return { g, W, H: height };
+  }
+  function chartEmpty(g, W, H, msg) {
+    g.fillStyle = '#6a6f9e'; g.font = '12px system-ui, sans-serif'; g.textAlign = 'center';
+    g.fillText(msg, W / 2, H / 2); g.textAlign = 'left';
+  }
+  function roundRect(g, x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, w / 2, h / 2));
+    g.beginPath();
+    g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+  }
+  function drawLineChart(cv, vals) {
+    const { g, W, H } = chartBase(cv, 150);
+    const padL = 26, padR = 10, padT = 12, padB = 16;
+    const x0 = padL, x1 = W - padR, yTop = padT, yBot = H - padB;
+    const yAt = (v) => yBot + (yTop - yBot) * (Math.max(0, Math.min(100, v)) / 100);
+    g.strokeStyle = 'rgba(255,255,255,.08)'; g.fillStyle = '#7c80ad'; g.lineWidth = 1; g.font = '10px system-ui';
+    [0, 50, 100].forEach((v) => { const y = yAt(v); g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); g.fillText(String(v), 4, y + 3); });
+    if (!vals.length) { chartEmpty(g, W, H, 'No rounds yet'); return; }
+    const n = vals.length;
+    const xAt = (i) => (n === 1 ? (x0 + x1) / 2 : x0 + (x1 - x0) * (i / (n - 1)));
+    g.beginPath(); g.moveTo(xAt(0), yBot);
+    vals.forEach((v, i) => g.lineTo(xAt(i), yAt(v)));
+    g.lineTo(xAt(n - 1), yBot); g.closePath();
+    g.fillStyle = 'rgba(0,212,184,.12)'; g.fill();
+    g.beginPath(); vals.forEach((v, i) => { const x = xAt(i), y = yAt(v); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+    g.strokeStyle = '#00d4b8'; g.lineWidth = 2; g.stroke();
+    g.fillStyle = '#7c5cff';
+    vals.forEach((v, i) => { g.beginPath(); g.arc(xAt(i), yAt(v), n > 30 ? 1.6 : 2.6, 0, 6.283); g.fill(); });
+  }
+  function drawHist(cv, hist) {
+    const { g, W, H } = chartBase(cv, 150);
+    const padL = 8, padR = 8, padT = 12, padB = 18;
+    const x0 = padL, x1 = W - padR, yBot = H - padB, yTop = padT;
+    const total = hist.reduce((a, b) => a + b, 0);
+    if (!total) { chartEmpty(g, W, H, 'No rounds yet'); return; }
+    const max = Math.max(...hist), n = hist.length, bw = (x1 - x0) / n;
+    g.font = '9px system-ui'; g.textAlign = 'center';
+    hist.forEach((c, i) => {
+      const h = max ? (yBot - yTop) * (c / max) : 0;
+      const x = x0 + i * bw + bw * 0.16, w = bw * 0.68;
+      if (c > 0 && h >= 1) {
+        g.fillStyle = i >= 8 ? '#36d399' : i >= 5 ? '#00d4b8' : i >= 3 ? '#7c5cff' : '#ff5d73';
+        roundRect(g, x, yBot - h, w, h, 3); g.fill();
+      }
+      g.fillStyle = '#7c80ad';
+      g.fillText(i === 10 ? '100' : String(i * 10), x0 + i * bw + bw / 2, H - 5);
+    });
+    g.textAlign = 'left';
+  }
+  function describeDist(hist, avg) {
+    const total = hist.reduce((a, b) => a + b, 0);
+    if (!total) return '';
+    let mode = 0; hist.forEach((c, i) => { if (c > hist[mode]) mode = i; });
+    const range = mode === 10 ? '100' : `${mode * 10}–${mode * 10 + 9}`;
+    const tier = avg >= 80 ? 'a razor-sharp ear 🦻' : avg >= 60 ? 'a solid ear 👂' : avg >= 40 ? 'a warming-up ear 🌱' : 'a wild guesser 🎲';
+    const pct = Math.round((hist[mode] / total) * 100);
+    return `Most guesses (${pct}%) land in the ${range} range — average closeness ${avg}/100. You’ve got ${tier}.`;
+  }
+
+  // ----- public profiles + analytics overlay -------------------------------
+  const profilesUI = (() => {
+    const modal = $('profiles-modal');
+    let currentId = null;
+
+    function open() { modal.classList.add('on'); showDir(); }
+    function close() { modal.classList.remove('on'); }
+    function showDir() {
+      $('profile-detail').hidden = true;
+      $('profiles-dir').hidden = false;
+      $('profiles-back').hidden = true;
+      $('profiles-msg').hidden = true;
+      $('profiles-title').textContent = '👥 Player profiles';
+      loadDir($('profiles-q').value.trim());
+    }
+
+    async function loadDir(q) {
+      const ul = $('profiles-list');
+      ul.innerHTML = '<li class="muted pl-empty">Loading…</li>';
+      let data;
+      try { data = await fetch('/api/profiles' + (q ? '?q=' + encodeURIComponent(q) : '')).then((r) => r.json()); }
+      catch (_) { ul.innerHTML = '<li class="muted pl-empty">Couldn’t load profiles.</li>'; return; }
+      const list = (data && data.profiles) || [];
+      if (!list.length) {
+        ul.innerHTML = `<li class="muted pl-empty">${q ? 'No players match that name.' : 'No players yet — play a game to be the first!'}</li>`;
+        return;
+      }
+      ul.innerHTML = '';
+      list.forEach((p, i) => {
+        const li = document.createElement('li');
+        li.className = 'row';
+        li.innerHTML =
+          `<span class="prank">${i + 1}</span>` +
+          `<span class="pavatar">${escapeHtml(p.avatar || '🙂')}</span>` +
+          `<span class="pname">${escapeHtml(p.name)}${p.id === me.pid ? ' <small class="muted">(you)</small>' : ''}</span>` +
+          `<span class="pmeta">${p.games} game${p.games === 1 ? '' : 's'} · avg ${p.avg}<br>best ${p.best} · 🏆 ${p.wins}</span>`;
+        li.onclick = () => openProfile(p.id);
+        ul.appendChild(li);
+      });
+    }
+
+    async function openProfile(id) {
+      modal.classList.add('on');
+      $('profiles-dir').hidden = true;
+      $('profiles-msg').hidden = true;
+      $('profile-detail').hidden = false;
+      $('profiles-back').hidden = false;
+      $('profiles-title').textContent = '📊 Profile';
+      $('pd-name').textContent = 'Loading…';
+      $('pd-meta').textContent = ''; $('pd-stats').innerHTML = ''; $('pd-langs').innerHTML = ''; $('pd-dist').textContent = '';
+      let p;
+      try { const r = await fetch('/api/profile/' + encodeURIComponent(id)); if (!r.ok) throw 0; p = await r.json(); }
+      catch (_) {
+        $('profile-detail').hidden = true;
+        const m = $('profiles-msg'); m.hidden = false;
+        m.textContent = id === me.pid
+          ? 'No stats yet — play a round and your analytics will appear here!'
+          : 'That profile has no stats yet.';
+        return;
+      }
+      render(p);
+    }
+
+    const stat = (b, label) => `<div class="stat"><b>${b}</b><span>${label}</span></div>`;
+    function render(p) {
+      currentId = p.id;
+      $('pd-avatar').textContent = p.avatar || '🙂';
+      $('pd-name').textContent = p.name + (p.id === me.pid ? ' (you)' : '');
+      const since = p.firstSeen ? new Date(p.firstSeen).toLocaleDateString() : '';
+      $('pd-meta').textContent = since ? `Playing since ${since}` : '';
+      $('pd-stats').innerHTML =
+        stat(p.games, 'games') + stat(p.wins, 'wins') + stat(p.rounds, 'rounds') +
+        stat(p.avg, 'avg score') + stat(p.best, 'best round') + stat(p.bestGame, 'best game');
+      const langs = p.langs || [], lu = $('pd-langs');
+      lu.innerHTML = langs.length
+        ? langs.map((l) =>
+            `<li><span class="lf">${flagHtml(l.flag)} ${escapeHtml(l.label)}</span>` +
+            `<span class="lbar"><i style="width:${Math.max(3, l.avg)}%"></i></span>` +
+            `<span class="lv"><b>${l.avg}</b> <small>· ${l.rounds}×</small></span></li>`).join('')
+        : '<li class="muted">No language data yet.</li>';
+      // draw after the panel is laid out so the canvases have a real width
+      requestAnimationFrame(() => {
+        drawLineChart($('pd-line'), (p.recent || []).map((r) => r.points));
+        drawHist($('pd-hist'), p.hist || []);
+      });
+      $('pd-dist').textContent = describeDist(p.hist || [], p.avg);
+    }
+
+    $('btn-profiles').onclick = open;
+    $('btn-my-stats').onclick = () => openProfile(me.pid);
+    if ($('btn-over-stats')) $('btn-over-stats').onclick = () => openProfile(me.pid);
+    $('profiles-close').onclick = close;
+    $('profiles-back').onclick = showDir;
+    $('profiles-refresh').onclick = () => loadDir($('profiles-q').value.trim());
+    let qDeb = null;
+    $('profiles-q').addEventListener('input', () => { clearTimeout(qDeb); qDeb = setTimeout(() => loadDir($('profiles-q').value.trim()), 250); });
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+    $('pd-share').onclick = async () => {
+      const link = `${location.origin}${location.pathname}?profile=${encodeURIComponent(currentId || me.pid)}`;
+      try { await navigator.clipboard.writeText(link); toast('🔗 Profile link copied!'); }
+      catch (_) { window.prompt('Copy this profile link:', link); }
+    };
+    return { open, openProfile };
+  })();
+
+  // deep-link straight to a profile: ?profile=<id>
+  (() => {
+    const pid = new URLSearchParams(location.search).get('profile');
+    if (!pid) return;
+    const intro = $('intro'); // drop the splash so the profile is interactive
+    if (intro) intro.classList.remove('on');
+    setTimeout(() => profilesUI.openProfile(pid), 300);
+  })();
+
   // ----- join screen + public lobbies -------------------------------------
   function nameVal() {
     const n = $('name-input').value.trim() || 'Player';
@@ -614,13 +813,13 @@
   }
   function joinByCode(code) {
     ctx();
-    socket.emit('room:join', { code, name: nameVal(), avatar: me.avatar }, (res) => {
+    socket.emit('room:join', { code, name: nameVal(), avatar: me.avatar, pid: me.pid }, (res) => {
       if (!res.ok) $('join-error').textContent = res.error || 'Could not join';
     });
   }
   $('btn-create').onclick = () => {
     ctx();
-    socket.emit('room:create', { name: nameVal(), avatar: me.avatar }, (res) => {
+    socket.emit('room:create', { name: nameVal(), avatar: me.avatar, pid: me.pid }, (res) => {
       if (!res.ok) $('join-error').textContent = res.error || 'Could not create room';
     });
   };
@@ -823,7 +1022,7 @@
       `<span class="txt">${spanLetters(text)}</span>` +
       `<button class="use">✓ Submit</button>` +
       `<canvas class="wave"></canvas>`;
-    li.querySelector('.use').onclick = () => { $('guess-input').value = text; submitGuess(text); };
+    li.querySelector('.use').onclick = () => { $('guess-input').value = text; submitGuess(text, false); };
     list.prepend(li);
     const gbuf = await decode(audio).catch(() => null);
     const player = makePlayer(gbuf, li.querySelector('.wave'),
@@ -832,16 +1031,30 @@
     player.play(0); // play + animate the moment you add it
   }
 
-  function submitGuess(text) {
-    socket.emit('guess:submit', { text });
-    $('guess-status').textContent = text
-      ? 'Locked in! You can still tweak it until time runs out.'
-      : '';
+  let lockedIn = false; // have I finalised my answer this round?
+  function setLocked(on) {
+    lockedIn = on;
+    $('guess-input').disabled = on;
+    $('btn-submit').disabled = on;
+    $('btn-lockin').disabled = on;
+  }
+  function submitGuess(text, final) {
+    if (lockedIn) return; // already final this round — no take-backs
+    socket.emit('guess:submit', { text, final: !!final });
+    if (final) {
+      setLocked(true);
+      $('guess-status').textContent = text ? '🔒 Locked in — waiting for the others…' : '🔒 Locked in.';
+    } else {
+      $('guess-status').textContent = text
+        ? '💾 Submitted — you can keep editing and re-submit until time runs out, or 🔒 Lock in to make it final.'
+        : '';
+    }
   }
   $('guess-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    submitGuess($('guess-input').value.trim());
+    submitGuess($('guess-input').value.trim(), false); // Enter / Submit = tentative
   });
+  $('btn-lockin').onclick = () => submitGuess($('guess-input').value.trim(), true);
 
   function startTimer(deadline) {
     clearInterval(timerInt);
@@ -903,6 +1116,7 @@
     $('syl-hint').textContent = `~${d.syllables} syllable${d.syllables > 1 ? 's' : ''}.`;
     $('guess-label').textContent = `Spell what you heard (${LANG_LABEL[answerLang] || answerLang})`;
     $('guess-input').value = '';
+    setLocked(false); // re-enable input + buttons for the new round
     $('guess-status').textContent = '';
     $('submitted-count').textContent = '';
     $('think-word').hidden = true;
@@ -927,8 +1141,10 @@
   });
 
   socket.on('guess:locked', (d) => {
-    $('submitted-count').textContent = `${d.submitted} / ${d.total} locked in`;
-    if (d.firstLock && d.id !== me.id) {
+    const drafting = (d.submitted || 0) - (d.locked || 0);
+    $('submitted-count').textContent =
+      `${d.locked || 0} / ${d.total} locked in` + (drafting > 0 ? ` · ${drafting} drafting…` : '');
+    if (d.firstFinal && d.id !== me.id) {
       toast(`<span class="lock">🔒</span> ${avatarSpan(d.avatar)} ${escapeHtml(d.name)} locked in their guess`);
       sfx.lock();
     }

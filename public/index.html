@@ -131,6 +131,11 @@
         <span><b id="stat-visitors">–</b> visitors</span>
       </div>
 
+      <div class="profiles-cta">
+        <button id="btn-profiles" class="ghost small" type="button">👥 Player profiles</button>
+        <button id="btn-my-stats" class="ghost small" type="button">📊 My stats</button>
+      </div>
+
       <div class="public-lobbies">
         <div class="pl-head">
           <h3>Public games</h3>
@@ -238,7 +243,8 @@
         <label id="guess-label">Spell what you heard (English)</label>
         <input id="guess-input" autocomplete="off" placeholder="type your best guess…" />
         <div class="row">
-          <button type="submit" class="primary">Lock in guess</button>
+          <button type="submit" id="btn-submit" class="primary">💾 Submit</button>
+          <button type="button" id="btn-lockin" class="ghost">🔒 Lock in</button>
           <button type="button" id="btn-hear-self" class="ghost">🔊 Hear my guess</button>
         </div>
         <p id="think-guess" class="thinking" hidden><span class="baby">👶</span> babbling the letters…</p>
@@ -281,6 +287,7 @@
       <ul id="final-list" class="results final"></ul>
       <div class="row end">
         <button id="btn-back-lobby" class="primary">Back to lobby</button>
+        <button id="btn-over-stats" class="ghost" type="button">📊 My stats</button>
       </div>
     </section>
   </main>
@@ -329,6 +336,55 @@
       </ol>
       <p class="hint">Scoring is by sound, not spelling — <code>banana</code> and <code>bununa</code> score almost the same.</p>
       <button id="btn-help-close" class="primary">Got it</button>
+    </div>
+  </div>
+
+  <!-- public player profiles + analytics -->
+  <div id="profiles-modal" class="overlay">
+    <div class="overlay-box card profiles-box">
+      <div class="profiles-head">
+        <button id="profiles-back" class="ghost small" type="button" hidden>← Back</button>
+        <h2 id="profiles-title">👥 Player profiles</h2>
+        <button id="profiles-close" class="ghost small" type="button">✕ Close</button>
+      </div>
+
+      <!-- directory -->
+      <div id="profiles-dir">
+        <div class="profiles-search">
+          <input id="profiles-q" placeholder="search players by name…" autocomplete="off" />
+          <button id="profiles-refresh" class="ghost small" type="button">⟳</button>
+        </div>
+        <ul id="profiles-list" class="profiles-list"><li class="muted pl-empty">Loading…</li></ul>
+      </div>
+
+      <!-- one player's analytics -->
+      <div id="profile-detail" hidden>
+        <div class="profile-hero">
+          <span id="pd-avatar" class="pd-avatar">🙂</span>
+          <div class="profile-hero-txt">
+            <h3 id="pd-name">—</h3>
+            <p id="pd-meta" class="muted"></p>
+          </div>
+          <button id="pd-share" class="ghost small" type="button" title="Copy link to this profile">🔗 Share</button>
+        </div>
+        <div id="pd-stats" class="pd-stats"></div>
+
+        <div class="pd-block">
+          <h4>Score over time <small class="muted">— your last rounds (0–100)</small></h4>
+          <canvas id="pd-line" class="chart"></canvas>
+        </div>
+        <div class="pd-block">
+          <h4>How well by language <small class="muted">— average closeness</small></h4>
+          <ul id="pd-langs" class="pd-langs"></ul>
+        </div>
+        <div class="pd-block">
+          <h4>Closeness distribution <small class="muted">— where the guesses land</small></h4>
+          <canvas id="pd-hist" class="chart"></canvas>
+          <p id="pd-dist" class="muted dist-note"></p>
+        </div>
+      </div>
+
+      <p id="profiles-msg" class="muted center-msg" hidden></p>
     </div>
   </div>
 

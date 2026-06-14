@@ -133,6 +133,9 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   list-style: none; margin: 0 0 8px; padding: 8px 10px; flex: 1; overflow-y: auto;
   background: #11132b; border: 1px solid #2a2d63; border-radius: 10px; min-height: 120px;
 }
+/* cap the lobby chat so new messages scroll inside the box instead of growing
+   the column (which stretched the settings panel beside it) */
+.lobby-chat .chat-list { max-height: 240px; }
 .chat-list li { margin-bottom: 5px; font-size: 0.9rem; line-height: 1.35; word-break: break-word; }
 .chat-list .c-name { font-weight: 600; color: var(--accent2); }
 .chat-list .c-sys { color: var(--muted); font-style: italic; font-size: 0.82rem; }
@@ -341,6 +344,50 @@ button.small { padding: 6px 12px; font-size: 0.85rem; }
 .overlay-box .big { font-size: 2.2rem; font-weight: 700; margin-bottom: 8px; }
 .help ol { padding-left: 20px; line-height: 1.55; }
 .help li { margin-bottom: 8px; }
+
+/* ---- public profiles + analytics ---- */
+.muted { color: var(--muted); }
+.profiles-cta { display: flex; gap: 10px; justify-content: center; margin: 8px 0 2px; }
+.profiles-box { max-width: 720px; width: 100%; text-align: left; max-height: 86vh; overflow-y: auto; }
+.profiles-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.profiles-head h2 { margin: 0; flex: 1; font-size: 1.25rem; }
+.profiles-search { display: flex; gap: 8px; margin-bottom: 10px; }
+.profiles-search input { flex: 1; }
+.center-msg { text-align: center; padding: 16px; }
+
+.profiles-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.profiles-list li.row {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; cursor: pointer;
+  background: #14162f; border: 1px solid #262a59; border-radius: 12px;
+  transition: transform .08s ease, border-color .15s ease;
+}
+.profiles-list li.row:hover { border-color: var(--accent); transform: translateX(2px); }
+.profiles-list .prank { width: 22px; color: var(--muted); font-weight: 700; text-align: center; }
+.profiles-list .pavatar { font-size: 1.5rem; }
+.profiles-list .pname { font-weight: 600; flex: 1; word-break: break-word; }
+.profiles-list .pmeta { color: var(--muted); font-size: .82rem; text-align: right; line-height: 1.35; flex: none; }
+
+.profile-hero { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.pd-avatar { font-size: 2.6rem; line-height: 1; }
+.profile-hero-txt { flex: 1; min-width: 0; }
+.profile-hero-txt h3 { margin: 0; }
+.pd-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.pd-stats .stat { background: #14162f; border: 1px solid #262a59; border-radius: 12px; padding: 10px 8px; text-align: center; }
+.pd-stats .stat b { display: block; font-size: 1.35rem; color: var(--accent2); }
+.pd-stats .stat span { font-size: .74rem; color: var(--muted); }
+
+.pd-block { margin-bottom: 18px; }
+.pd-block h4 { margin: 0 0 8px; }
+canvas.chart { width: 100%; height: 150px; display: block; background: #11132b; border: 1px solid #2a2d63; border-radius: 10px; }
+
+.pd-langs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pd-langs li { display: flex; align-items: center; gap: 10px; }
+.pd-langs .lf { width: 132px; display: flex; align-items: center; gap: 7px; font-size: .9rem; flex: none; }
+.pd-langs .lbar { flex: 1; height: 12px; background: #1c1f44; border-radius: 999px; overflow: hidden; }
+.pd-langs .lbar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent)); border-radius: 999px; }
+.pd-langs .lv { width: 86px; text-align: right; font-size: .85rem; }
+.pd-langs .lv small { color: var(--muted); }
+.dist-note { margin-top: 8px; font-size: .85rem; line-height: 1.45; }
 
 /* ---- toasts ---- */
 .toasts { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 50;

@@ -20,7 +20,7 @@ const DEFAULT_SETTINGS = {
   answerLang: 'en',
   rounds: 5,
   roundSeconds: 45,
-  revealSeconds: 20,
+  revealSeconds: 30,
   difficulty: 2,
   visibility: 'public', // 'public' (listed in the browser) | 'private' (code only)
   previewWaves: true, // let players see/compare waveforms before submitting
@@ -54,12 +54,12 @@ class Room {
   }
 
   // --- players -------------------------------------------------------------
-  addPlayer(id, name, avatar) {
+  addPlayer(id, name, avatar, pid) {
     const clean = (name || 'Player').toString().slice(0, 20).trim() || 'Player';
     const isHost = this.players.size === 0;
     if (isHost) this.hostId = id;
     this.players.set(id, {
-      id, name: clean, avatar: cleanAvatar(avatar), score: 0, connected: true, isHost,
+      id, name: clean, avatar: cleanAvatar(avatar), pid: cleanPid(pid), score: 0, connected: true, isHost,
     });
     return this.players.get(id);
   }
@@ -175,27 +175,35 @@ class Room {
     return synthPhonemesB64(this.word.phonemes, { wpm: 100, voice: this.settings.voice });
   }
 
-  submitGuess(id, text) {
+  submitGuess(id, text, final) {
     if (this.state !== 'playing' || this.paused) return false;
     const player = this.players.get(id);
     if (!player) return false;
-    const firstLock = !this.guesses.has(id);
-    this.guesses.set(id, { text: (text || '').toString().slice(0, 60), submittedAt: Date.now() });
+    final = !!final;
+    const prev = this.guesses.get(id);
+    const firstLock = !prev; // first time this player submits anything this round
+    const firstFinal = final && !(prev && prev.final); // first time they lock it in
+    this.guesses.set(id, { text: (text || '').toString().slice(0, 60), submittedAt: Date.now(), final });
 
-    // Let everyone know who has locked in (the first time only) — no guess text
-    // leaks, just the name and the running tally.
+    const locked = [...this.guesses.values()].filter((g) => g.final).length;
+    // Broadcast the tally only — never the guess text. A tentative "draft" submit
+    // keeps the answer editable; a final "lock in" is what can end the round early.
     this.emit('guess:locked', {
       id,
       name: player.name,
       avatar: player.avatar,
       firstLock,
+      final,
+      firstFinal,
       submitted: this.guesses.size,
+      locked,
       total: this.players.size,
     });
 
-    // If everyone present has guessed, end the round early.
+    // End early only once every present player has LOCKED IN (not just drafted),
+    // so a tentative submit never robs anyone of the chance to change their mind.
     const active = [...this.players.values()].filter((p) => p.connected);
-    if (active.length && active.every((p) => this.guesses.has(p.id))) {
+    if (active.length && active.every((p) => { const g = this.guesses.get(p.id); return g && g.final; })) {
       this._reveal();
     }
     return true;
@@ -264,13 +272,38 @@ class Room {
       isLast: this.round >= this.settings.rounds,
     });
 
+    // Hand the round's per-player outcome to the server for profile analytics.
+    // pid stays server-side (it's never put on the wire to other players).
+    if (this.onRoundComplete) {
+      this.onRoundComplete({
+        sourceKey: this.word.sourceKey,
+        sourceLabel: this.word.source,
+        flag: this.word.flag,
+        rows: results.map((r) => ({
+          pid: (this.players.get(r.id) || {}).pid,
+          name: r.name, avatar: r.avatar,
+          points: r.points, hasGuess: !!r.guess,
+        })),
+      });
+    }
+
     this._timer = setTimeout(() => this._advanceFromReveal(), this.settings.revealSeconds * 1000);
   }
 
   _end() {
     clearTimeout(this._timer);
     this.state = 'ended';
-    this.emit('game:over', { leaderboard: this.leaderboard() });
+    const board = this.leaderboard();
+    this.emit('game:over', { leaderboard: board });
+    if (this.onGameEnd) {
+      const top = board.length ? board[0].score : 0;
+      this.onGameEnd(board.map((e, i) => ({
+        pid: (this.players.get(e.id) || {}).pid,
+        score: e.score,
+        // a "win" only counts with an opponent and a non-zero, sole-top score
+        won: i === 0 && e.score > 0 && board.length > 1 && (board[1] ? board[1].score < top : true),
+      })));
+    }
     this.state = 'lobby'; // ready for a rematch from the lobby
   }
 
@@ -328,6 +361,11 @@ function clamp(n, lo, hi) {
 // Avatars are a single emoji chosen client-side; keep it short and harmless.
 function cleanAvatar(a) {
   return typeof a === 'string' ? [...a].slice(0, 3).join('') : '';
+}
+
+// A profile id is an opaque public token the client generates and persists.
+function cleanPid(p) {
+  return typeof p === 'string' && /^[A-Za-z0-9_-]{6,64}$/.test(p) ? p : null;
 }
 
 module.exports = { Room, makeCode, DEFAULT_SETTINGS };

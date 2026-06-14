@@ -33,6 +33,17 @@ ok('resume refused when not paused', room.resume('h') === false);
 ok('advance refused outside reveal', room.advance('h') === false);
 ok('submitGuess refused outside playing', room.submitGuess('h', 'x') === false);
 
+// tentative submit keeps the round open; only a lock-in counts toward early reveal
+const ev2 = [];
+const r2 = new Room('T2', (ev, payload) => ev2.push({ ev, payload }));
+r2.addPlayer('a', 'A');
+r2.state = 'playing'; // simulate an active round without the async _beginRound
+r2.deadline = Date.now() + 60000;
+ok('tentative submit accepted', r2.submitGuess('a', 'foo', false) === true);
+const lastLock = ev2[ev2.length - 1];
+ok('tentative submit is flagged not-final', lastLock.ev === 'guess:locked' && lastLock.payload.final === false && lastLock.payload.locked === 0);
+ok('round stays open after a tentative submit by all', r2.state === 'playing');
+
 // summary shape for the public browser
 const sum = room.summary();
 ok('summary names the host', sum.hostName === 'Ada');

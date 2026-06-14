@@ -37,13 +37,13 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   await new Promise((res) => guest.emit('room:join', { code, name: 'Bjarne' }, () => res()));
   console.log('  ✓ guest joined');
 
-  // 1 round, short timer; both auto-guess on round:start
+  // 1 round, short timer; both auto-lock-in on round:start (which ends the round)
   host.emit('room:settings', { rounds: 1, roundSeconds: 3, revealSeconds: 5, difficulty: 2, sources: ['gibberish'] });
   await wait(150);
 
   let startSeen = null;
   host.on('round:start', (d) => { startSeen = d; });
-  const guessFor = (sock, text) => sock.on('round:start', () => sock.emit('guess:submit', { text }));
+  const guessFor = (sock, text) => sock.on('round:start', () => sock.emit('guess:submit', { text, final: true }));
   guessFor(host, 'bababa');
   guessFor(guest, 'lalala');
 

@@ -16,6 +16,7 @@ const { Room, makeCode } = require('./src/game');
 const { g2p } = require('./src/phonetics');
 const { synthPhonemesB64, backendName, warmup } = require('./src/tts');
 const stats = require('./src/stats');
+const profiles = require('./src/profiles');
 
 const app = express();
 const server = http.createServer(app);
@@ -23,6 +24,14 @@ const io = new Server(server);
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/healthz', (_req, res) => res.json({ ok: true, rooms: rooms.size }));
+
+// public player analytics (no auth — every profile is browsable by anyone)
+app.get('/api/profiles', (req, res) => res.json({ profiles: profiles.list(req.query.q) }));
+app.get('/api/profile/:id', (req, res) => {
+  const p = profiles.get(req.params.id);
+  if (!p) return res.status(404).json({ error: 'not found' });
+  res.json(p);
+});
 
 /** @type {Map<string, Room>} */
 const rooms = new Map();
@@ -33,6 +42,22 @@ function getOrCreateRoom(code) {
   let room = rooms.get(code);
   if (!room) {
     room = new Room(code, (event, payload) => io.to(code).emit(event, payload));
+    // feed each scored round / finished game into the public profile store
+    room.onRoundComplete = (info) => {
+      for (const row of info.rows) {
+        if (!row.pid || !row.hasGuess) continue;
+        profiles.recordRound(row.pid, {
+          name: row.name, avatar: row.avatar, points: row.points,
+          sourceKey: info.sourceKey, sourceLabel: info.sourceLabel, flag: info.flag,
+        });
+      }
+    };
+    room.onGameEnd = (rows) => {
+      for (const row of rows) {
+        if (!row.pid) continue;
+        profiles.recordGame(row.pid, { finalScore: row.score, won: row.won });
+      }
+    };
     rooms.set(code, room);
   }
   return room;
@@ -51,22 +76,22 @@ io.on('connection', (socket) => {
   socket.emit('stats', { ...stats.get(), online: io.engine.clientsCount });
   broadcastStats();
 
-  socket.on('room:create', ({ name, avatar }, ack) => {
+  socket.on('room:create', ({ name, avatar, pid }, ack) => {
     let code = makeCode();
     while (rooms.has(code)) code = makeCode();
     const room = getOrCreateRoom(code);
-    joinRoom(socket, room, name, avatar);
+    joinRoom(socket, room, name, avatar, pid);
     if (typeof ack === 'function') ack({ ok: true, code });
   });
 
-  socket.on('room:join', ({ code, name, avatar }, ack) => {
+  socket.on('room:join', ({ code, name, avatar, pid }, ack) => {
     code = (code || '').toString().toUpperCase().trim();
     const room = rooms.get(code);
     if (!room) {
       if (typeof ack === 'function') ack({ ok: false, error: 'Room not found' });
       return;
     }
-    joinRoom(socket, room, name, avatar);
+    joinRoom(socket, room, name, avatar, pid);
     if (typeof ack === 'function') ack({ ok: true, code });
   });
 
@@ -111,9 +136,9 @@ io.on('connection', (socket) => {
     if (room && room.start(socket.id)) { stats.addGame(); broadcastStats(); }
   });
 
-  socket.on('guess:submit', ({ text }) => {
+  socket.on('guess:submit', ({ text, final }) => {
     const room = currentRoom(socket);
-    if (room) room.submitGuess(socket.id, text); // room broadcasts who locked in
+    if (room) room.submitGuess(socket.id, text, final); // room broadcasts the tally
   });
 
   socket.on('round:force', () => {
@@ -164,11 +189,11 @@ io.on('connection', (socket) => {
   socket.on('room:leave', () => leaveRoom(socket));
 });
 
-function joinRoom(socket, room, name, avatar) {
+function joinRoom(socket, room, name, avatar, pid) {
   leaveRoom(socket); // ensure single-room membership
   socket.join(room.code);
   where.set(socket.id, room.code);
-  const player = room.addPlayer(socket.id, name, avatar);
+  const player = room.addPlayer(socket.id, name, avatar, pid);
   socket.emit('room:joined', { you: player.id, ...room.publicState() });
   broadcastLobby(room);
   io.to(room.code).emit('chat:msg', { system: true, text: `${player.name} joined` });
