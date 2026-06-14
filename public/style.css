@@ -127,7 +127,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .roomcode .small { margin-left: 10px; vertical-align: 2px; }
 
 /* ---- chat ---- */
-.chat { display: flex; flex-direction: column; flex: 1; min-height: 220px; margin-top: 16px; }
+/* pinned to the bottom of the left column */
+.chat { display: flex; flex-direction: column; margin-top: auto; padding-top: 16px; }
 .chat h3 { margin-bottom: 6px; }
 .chat-list {
   list-style: none; margin: 0 0 8px; padding: 8px 10px; flex: 1; overflow-y: auto;
@@ -199,7 +200,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 /* in-game playback-speed slider */
 .speed-row { display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; font-size: 0.9rem; }
 .speed-row input[type=range] { flex: 1; }
-.speed-row output { color: var(--accent2); font-weight: 600; min-width: 3ch; }
+.speed-row output { color: var(--accent2); font-weight: 600; min-width: 5ch; }
+#btn-slow { min-width: 132px; }
 
 /* early-bonus chip in the reveal */
 .pts .bonus { color: var(--warn); font-size: 0.78rem; margin-left: 3px; }
@@ -295,14 +297,26 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 }
 .flag img { width: 100%; height: 100%; object-fit: cover; }
 
-/* ---- avatars ---- */
+/* ---- avatars (a custom invented-script glyph in a chosen colour) ---- */
 .avatar { display: inline-block; font-size: 1.05em; line-height: 1; vertical-align: -0.1em; margin-right: 2px; }
-.avatar-picker { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
-.avatar-picker button {
-  width: 40px; height: 40px; padding: 0; font-size: 1.3rem; line-height: 1;
-  background: #14162f; border: 2px solid transparent; border-radius: 12px;
+.avatar.glyph, .avatar-cur { font-weight: 800; font-family: 'Fredoka', system-ui, 'Noto Sans', 'Noto Sans CJK JP', sans-serif; }
+
+/* character + colour builder */
+.avatar-build { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 4px; }
+.avatar-picker.mini { max-height: 220px; overflow-y: auto; }
+.ab-row-label { font-size: 0.72rem; color: var(--muted); margin: 2px 0 -2px; }
+.ab-colors { display: flex; flex-wrap: wrap; gap: 7px; }
+.ab-color { width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid #2a2d63; cursor: pointer; }
+.ab-color.sel { border-color: #fff; transform: scale(1.14); box-shadow: 0 0 0 2px rgba(255,255,255,.22); }
+.ab-glyphs { display: flex; flex-wrap: wrap; gap: 6px; max-height: 150px; overflow-y: auto; padding: 2px; }
+.ab-glyph {
+  width: 38px; height: 38px; padding: 0; font-size: 1.3rem; font-weight: 800; line-height: 1;
+  font-family: 'Fredoka', system-ui, 'Noto Sans', 'Noto Sans CJK JP', sans-serif;
+  background: #14162f; border: 2px solid transparent; border-radius: 10px;
 }
-.avatar-picker button.sel { border-color: var(--accent2); background: #1d2046; transform: translateY(-2px); }
+.ab-glyph.sel { border-color: var(--accent2); background: #1d2046; transform: translateY(-2px); }
+.avatar-preview { display: inline-flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--muted); }
+.avatar-preview .avatar-cur { font-size: 1.8rem; }
 
 /* ---- "thinking baby" while audio is generating ---- */
 .thinking { color: var(--warn); min-height: 1.2em; margin: 8px 0 0; }

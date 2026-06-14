@@ -484,9 +484,13 @@ function clamp(n, lo, hi) {
   return Math.max(lo, Math.min(hi, Math.round(n)));
 }
 
-// Avatars are a single emoji chosen client-side; keep it short and harmless.
+// Avatars are either a custom "glyph|#rrggbb" (an invented-script character in a
+// colour) or, for older clients, a short emoji. Keep both short and harmless.
 function cleanAvatar(a) {
-  return typeof a === 'string' ? [...a].slice(0, 3).join('') : '';
+  if (typeof a !== 'string') return '';
+  const m = a.match(/^(.{1,4})\|(#[0-9a-fA-F]{6})$/);
+  if (m) return `${[...m[1]].slice(0, 2).join('')}|${m[2].toLowerCase()}`;
+  return [...a].slice(0, 3).join(''); // legacy emoji
 }
 
 // A profile id is an opaque public token the client generates and persists.

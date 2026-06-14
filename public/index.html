@@ -113,7 +113,8 @@
       <label>Your name
         <input id="name-input" maxlength="20" placeholder="e.g. Ada" autocomplete="off" />
       </label>
-      <label>Pick your avatar</label>
+      <label>Make your character</label>
+      <div class="avatar-preview">Preview: <span id="join-avatar-cur" class="avatar-cur">あ</span></div>
       <div id="avatar-picker" class="avatar-picker"></div>
       <div class="row">
         <button id="btn-create" class="primary">Create room</button>
@@ -159,7 +160,7 @@
           <div class="me-edit">
             <span class="me-edit-label">You</span>
             <input id="lobby-name" maxlength="20" placeholder="your name" autocomplete="off" />
-            <button id="lobby-avatar-btn" class="ghost small" type="button" title="Change avatar"><span id="lobby-avatar-cur">🙂</span> ▾</button>
+            <button id="lobby-avatar-btn" class="ghost small" type="button" title="Change character"><span id="lobby-avatar-cur" class="avatar-cur">あ</span> ▾</button>
           </div>
           <div id="lobby-avatar-picker" class="avatar-picker mini" hidden></div>
           <h3>Players</h3>

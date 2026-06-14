@@ -27,10 +27,31 @@
   }
 
   // ----- local state -------------------------------------------------------
-  const AVATARS = ['🦊', '🐼', '🐧', '🐸', '🦄', '🐙', '🐯', '🐵', '🐶', '🐱', '🦁', '🐮',
-    '🐷', '🐔', '🦉', '🐢', '🦖', '👽', '🤖', '🐲', '🐝', '🦋', '🐺', '🐨'];
-  const me = { id: null, name: localStorage.getItem('babble.name') || '',
-    avatar: localStorage.getItem('babble.avatar') || AVATARS[Math.floor(Math.random() * AVATARS.length)] };
+  // custom avatars: a colourful invented-script glyph (like the floating letters)
+  // in a chosen colour. avatar is stored as "glyph|#rrggbb".
+  const GLYPHS = [
+    'あ', 'か', 'き', 'ね', 'こ', 'カ', 'ナ', 'ホ', '本', '字', '文', '中',
+    'А', 'Я', 'Ж', 'Ф', 'Д', 'Б', 'Г', 'И', 'Љ', 'Ћ',
+    'α', 'β', 'γ', 'δ', 'λ', 'Ω', 'Σ', 'Φ', 'Ψ', 'Ξ',
+    'অ', 'আ', 'ক', 'খ', 'ম', 'ন', 'ল', 'ব', 'ও',
+    'क', 'ख', 'ग', 'अ', 'उ', 'ह', 'ॐ',
+    '가', '나', '다', '한', '글', 'ع', 'ص', 'ك', 'م', 'ن', 'ﺵ',
+  ];
+  const COLORS = ['#ff6b81', '#00d4b8', '#ffb454', '#8a7bff', '#3ddc97', '#ff9bd6',
+    '#5ad1ff', '#ffd24d', '#b491ff', '#ff5d73', '#36d399', '#7c5cff'];
+  const rand = (a) => a[Math.floor(Math.random() * a.length)];
+  function parseAvatar(a) {
+    const m = String(a || '').match(/^(.+)\|(#[0-9a-fA-F]{6})$/);
+    return m ? { glyph: m[1], color: m[2] } : null;
+  }
+  const composeAvatar = (g, c) => `${g}|${c}`;
+
+  const me = { id: null, name: localStorage.getItem('babble.name') || '' };
+  {
+    const pa = parseAvatar(localStorage.getItem('babble.avatar')) || { glyph: rand(GLYPHS), color: rand(COLORS) };
+    me.glyph = pa.glyph; me.color = pa.color; me.avatar = composeAvatar(me.glyph, me.color);
+    localStorage.setItem('babble.avatar', me.avatar);
+  }
   // a stable, public profile id so a player's stats follow them across games
   function genPid() {
     try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (_) {}
@@ -45,7 +66,11 @@
     if (e[flag]) return `<span class="flag">${e[flag]}</span>`;
     return `<span class="flag"><img loading="lazy" src="https://flagcdn.com/w40/${flag}.png" alt="" /></span>`;
   }
-  const avatarSpan = (a) => (a ? `<span class="avatar">${escapeHtml(a)}</span>` : '');
+  const avatarSpan = (a) => {
+    const p = parseAvatar(a);
+    if (p) return `<span class="avatar glyph" style="color:${p.color}">${escapeHtml(p.glyph)}</span>`;
+    return a ? `<span class="avatar">${escapeHtml(a)}</span>` : ''; // legacy emoji
+  };
   // a small persistent profile (offline; "Sign in with Google" could sync this later)
   const profile = (() => { try { return JSON.parse(localStorage.getItem('babble.profile')) || {}; } catch (_) { return {}; } })();
   function renderProfile() {
@@ -54,31 +79,45 @@
       el.innerHTML = `${avatarSpan(me.avatar)} <b>${escapeHtml(me.name || 'You')}</b> · ${profile.games} game${profile.games > 1 ? 's' : ''} played · best <b>${profile.best || 0}</b> · 🏆 ${profile.wins || 0} win${profile.wins === 1 ? '' : 's'}`;
     } else { el.textContent = ''; }
   }
-  // choosing an avatar updates state, both pickers, the lobby chip, and the room
-  function chooseAvatar(a) {
-    me.avatar = a;
-    localStorage.setItem('babble.avatar', a);
-    socket.emit('player:avatar', { avatar: a }); // live-update if already in a room
-    document.querySelectorAll('#avatar-picker button, #lobby-avatar-picker button')
-      .forEach((x) => x.classList.toggle('sel', x.dataset.av === a));
-    const cur = $('lobby-avatar-cur'); if (cur) cur.textContent = a;
-    renderProfile();
-    sfx.blip(660, 0.06);
-  }
+  // build a character + colour picker into a container (used on join + in lobby)
   function buildAvatarPicker(boxId) {
     const box = $(boxId);
     if (!box) return;
-    box.innerHTML = '';
-    AVATARS.forEach((a) => {
+    box.classList.add('avatar-build');
+    box.innerHTML =
+      '<div class="ab-row-label">Colour</div><div class="ab-colors"></div>' +
+      '<div class="ab-row-label">Character</div><div class="ab-glyphs"></div>';
+    const colors = box.querySelector('.ab-colors');
+    COLORS.forEach((c) => {
       const b = document.createElement('button');
-      b.type = 'button'; b.textContent = a; b.dataset.av = a;
-      if (a === me.avatar) b.classList.add('sel');
-      b.onclick = () => chooseAvatar(a);
-      box.appendChild(b);
+      b.type = 'button'; b.className = 'ab-color'; b.dataset.color = c; b.style.background = c;
+      b.title = 'Colour'; if (c === me.color) b.classList.add('sel');
+      b.onclick = () => { me.color = c; commitAvatar(); };
+      colors.appendChild(b);
     });
+    const glyphs = box.querySelector('.ab-glyphs');
+    GLYPHS.forEach((gch) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'ab-glyph'; b.dataset.glyph = gch; b.textContent = gch;
+      b.style.color = me.color; if (gch === me.glyph) b.classList.add('sel');
+      b.onclick = () => { me.glyph = gch; commitAvatar(); };
+      glyphs.appendChild(b);
+    });
+  }
+  // apply the current glyph+colour everywhere and tell the room
+  function commitAvatar() {
+    me.avatar = composeAvatar(me.glyph, me.color);
+    localStorage.setItem('babble.avatar', me.avatar);
+    socket.emit('player:avatar', { avatar: me.avatar }); // live-update if already in a room
+    document.querySelectorAll('.ab-color').forEach((x) => x.classList.toggle('sel', x.dataset.color === me.color));
+    document.querySelectorAll('.ab-glyph').forEach((x) => { x.style.color = me.color; x.classList.toggle('sel', x.dataset.glyph === me.glyph); });
+    document.querySelectorAll('.avatar-cur').forEach((el) => { el.textContent = me.glyph; el.style.color = me.color; });
+    renderProfile();
+    sfx.blip(660, 0.06);
   }
   buildAvatarPicker('avatar-picker');
   buildAvatarPicker('lobby-avatar-picker');
+  document.querySelectorAll('.avatar-cur').forEach((el) => { el.textContent = me.glyph; el.style.color = me.color; });
   let state = null; // last room snapshot
   let current = { audio: '', buffer: null }; // current round target
   let answerLang = 'en';
@@ -125,42 +164,65 @@
   // previous one, so mashing ▶ restarts the word instead of stacking copies.
   let simpleSrc = null;
   function stopSimple() { if (simpleSrc) { try { simpleSrc.stop(); } catch (_) {} simpleSrc = null; } }
-  function playBuffer(buf) {
+  function playBuffer(buf, rate = 1) {
     const c = ctx();
     if (!c || !buf) return;
     stopSimple();
     if (activeViz) { activeViz.stop(); activeViz = null; } // also halt a waveform player
     const src = c.createBufferSource();
     src.buffer = buf;
-    src.playbackRate.value = playRate;
+    src.playbackRate.value = rate;
     src.connect(c.destination);
     src.onended = () => { if (simpleSrc === src) simpleSrc = null; };
     simpleSrc = src;
     src.start();
   }
-  async function playB64(b64) { try { playBuffer(await decode(b64)); } catch (_) {} }
+  async function playB64(b64, rate = 1) { try { playBuffer(await decode(b64), rate); } catch (_) {} }
 
+  // tint a #rrggbb colour lighter (+) or darker (-) by a percent
+  function shade(hex, pct) {
+    const n = parseInt(hex.slice(1), 16);
+    const f = (s) => { const v = Math.max(0, Math.min(255, ((n >> s) & 255) + Math.round(255 * pct / 100))); return v; };
+    return `rgb(${f(16)},${f(8)},${f(0)})`;
+  }
+  // professional-looking waveform: mirrored, rounded bars with a soft gradient
+  // and a faint centre line. peaks are gently compressed so quiet detail shows.
   function drawWave(canvas, buf, { color = '#00d4b8', alpha = 1, clear = true } = {}) {
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
     const W = (canvas.width = Math.max(1, Math.floor(canvas.clientWidth * dpr)));
     const H = (canvas.height = Math.max(1, Math.floor(canvas.clientHeight * dpr)));
     const g = canvas.getContext('2d');
-    if (clear) g.clearRect(0, 0, W, H);
+    if (clear) {
+      g.clearRect(0, 0, W, H);
+      g.globalAlpha = 0.5; g.fillStyle = 'rgba(255,255,255,0.06)';
+      g.fillRect(0, Math.round(H / 2) - Math.ceil(dpr / 2), W, Math.max(1, Math.round(dpr))); // centre line
+      g.globalAlpha = 1;
+    }
     if (!buf) return;
     const data = buf.getChannelData(0);
-    const step = Math.max(1, Math.floor(data.length / W));
     const mid = H / 2;
-    g.globalAlpha = alpha; g.strokeStyle = color; g.lineWidth = dpr;
+    const barW = Math.max(2 * dpr, 3 * dpr), gap = 2 * dpr, step = barW + gap;
+    const nbars = Math.max(1, Math.floor((W + gap) / step));
+    const block = Math.max(1, Math.floor(data.length / nbars));
+    const grad = g.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, shade(color, 12));
+    grad.addColorStop(0.5, color);
+    grad.addColorStop(1, shade(color, -16));
+    g.globalAlpha = alpha; g.fillStyle = grad;
     g.beginPath();
-    for (let x = 0; x < W; x++) {
-      let min = 1, max = -1;
-      const start = x * step;
-      for (let j = 0; j < step; j++) { const v = data[start + j]; if (v < min) min = v; if (v > max) max = v; }
-      g.moveTo(x + 0.5, mid + min * mid * 0.92);
-      g.lineTo(x + 0.5, mid + max * mid * 0.92);
+    for (let i = 0; i < nbars; i++) {
+      const s = i * block;
+      let peak = 0;
+      for (let j = 0; j < block; j++) { const v = Math.abs(data[s + j] || 0); if (v > peak) peak = v; }
+      const h = Math.max(1.5 * dpr, Math.pow(peak, 0.82) * (mid - dpr) * 1.9);
+      const x = i * step;
+      const r = Math.min(barW / 2, h);
+      if (g.roundRect) g.roundRect(x, mid - h, barW, h * 2, r);
+      else { g.moveTo(x, mid - h); g.rect(x, mid - h, barW, h * 2); } // older browsers
     }
-    g.stroke(); g.globalAlpha = 1;
+    g.fill();
+    g.globalAlpha = 1;
   }
 
   // ----- a player with a scrubbable playhead + karaoke letter shading ------
@@ -203,13 +265,13 @@
       if (t >= dur) { drawAt(dur); stop(); setTimeout(reset, 450); return; }
       drawAt(t); raf = requestAnimationFrame(frame);
     };
-    const play = (offset = 0) => {
+    const play = (offset = 0, rate = 1) => {
       stopSimple(); // don't let raw playback bleed under the waveform player
       if (activeViz && activeViz !== api) activeViz.stop();
       activeViz = api;
       stop();
       const c = ctx(); if (!c) return;
-      curRate = playRate;
+      curRate = rate;
       src = c.createBufferSource(); src.buffer = buffer; src.playbackRate.value = curRate; src.connect(c.destination);
       off = Math.max(0, Math.min(dur, offset)); t0 = c.currentTime;
       src.start(0, off); playing = true; frame();
@@ -734,7 +796,7 @@
         li.className = 'row';
         li.innerHTML =
           `<span class="prank">${i + 1}</span>` +
-          `<span class="pavatar">${escapeHtml(p.avatar || '🙂')}</span>` +
+          `<span class="pavatar">${avatarSpan(p.avatar) || '🙂'}</span>` +
           `<span class="pname">${escapeHtml(p.name)}${p.id === me.pid ? ' <small class="muted">(you)</small>' : ''}</span>` +
           `<span class="pmeta">${p.games} game${p.games === 1 ? '' : 's'} · avg ${p.avg}<br>best ${p.best} · 🏆 ${p.wins}</span>`;
         li.onclick = () => openProfile(p.id);
@@ -767,7 +829,7 @@
     const stat = (b, label) => `<div class="stat"><b>${b}</b><span>${label}</span></div>`;
     function render(p) {
       currentId = p.id;
-      $('pd-avatar').textContent = p.avatar || '🙂';
+      $('pd-avatar').innerHTML = avatarSpan(p.avatar) || '🙂';
       $('pd-name').textContent = p.name + (p.id === me.pid ? ' (you)' : '');
       const since = p.firstSeen ? new Date(p.firstSeen).toLocaleDateString() : '';
       $('pd-meta').textContent = since ? `Playing since ${since}` : '';
@@ -957,7 +1019,8 @@
 
     // "you" editor reflects current name + avatar
     setIfIdle('lobby-name', me.name || '');
-    $('lobby-avatar-cur').textContent = me.avatar;
+    $('lobby-avatar-cur').textContent = me.glyph;
+    $('lobby-avatar-cur').style.color = me.color;
 
     const isHost = s.hostId === me.id;
     $('settings').classList.toggle('locked', !isHost);
@@ -1049,28 +1112,40 @@
 
   // ----- play --------------------------------------------------------------
   let origPlayer = null; // play-screen "Original" waveform player (when preview on)
-  const playWord = () => { if (origPlayer) origPlayer.play(0); else playB64(current.audio); };
+  // ▶ Play always uses a clean 1× reference; only the speed button uses the slider,
+  // so reveal / next-round playback is never stuck at a previous round's speed.
+  const playWordAt = (rate) => { if (origPlayer) origPlayer.play(0, rate); else playB64(current.audio, rate); };
+  const playWord = () => playWordAt(1);
   $('btn-replay').onclick = playWord;
   $('btn-replay-target').onclick = playWord;
-  $('btn-slow').onclick = () => {
-    $('think-word').hidden = false;
-    socket.emit('word:slow', {}, (res) => {
-      $('think-word').hidden = true;
-      if (res && res.audio) playB64(res.audio);
-    });
-  };
+  $('btn-slow').onclick = () => playWordAt(playRate);
 
-  // in-game playback speed (per-player; remembered across rounds)
+  // in-game playback speed (per-player; remembered across rounds). the button's
+  // face follows the slider: snail → tortoise → hare → car → rocket.
   const fmtRate = (r) => r.toFixed(2).replace(/0$/, '') + '×';
+  function speedInfo(r) {
+    if (r <= 0.65) return { e: '🐌', t: 'Snail' };
+    if (r <= 0.9) return { e: '🐢', t: 'Tortoise' };
+    if (r < 1.1) return { e: '🐇', t: 'Hare' };
+    if (r < 1.35) return { e: '🚗', t: 'Car' };
+    return { e: '🚀', t: 'Rocket' };
+  }
+  function refreshSpeedUI() {
+    const i = speedInfo(playRate);
+    $('btn-slow').textContent = `${i.e} ${i.t}`;
+    $('btn-slow').title = `Play the word at ${fmtRate(playRate)}`;
+    $('speed-out').textContent = `${i.e} ${fmtRate(playRate)}`;
+    $('speed').value = playRate;
+  }
   (function initSpeed() {
     const saved = parseFloat(localStorage.getItem('babble.speed'));
     if (saved >= 0.5 && saved <= 1.5) playRate = saved;
-    $('speed').value = playRate; $('speed-out').textContent = fmtRate(playRate);
+    refreshSpeedUI();
   })();
   $('speed').addEventListener('input', () => {
     playRate = parseFloat($('speed').value) || 1;
-    $('speed-out').textContent = fmtRate(playRate);
     localStorage.setItem('babble.speed', String(playRate));
+    refreshSpeedUI();
   });
 
   $('btn-hear-self').onclick = () => {
