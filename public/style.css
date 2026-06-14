@@ -169,6 +169,40 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   padding: 10px 12px; background: #14162f; border-radius: 10px; margin-bottom: 8px;
 }
 .players .crown { color: var(--warn); }
+.players .pl-main { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.players .pl-right { display: flex; align-items: center; gap: 8px; flex: none; }
+.players .bot-tag { font-size: 0.7rem; color: var(--accent2); background: #11233a; border: 1px solid #1f4a5e; padding: 2px 7px; border-radius: 999px; }
+.players .kick-btn, .players .botx-btn {
+  background: transparent; border: 1px solid #4a2f50; color: #ff8aa5;
+  padding: 3px 9px; border-radius: 999px; font-size: 0.74rem;
+}
+.players .kick-btn:hover, .players .botx-btn:hover { background: #3a1f2c; }
+.players .kick-votes { font-size: 0.72rem; color: var(--warn); }
+
+/* lobby "you" editor */
+.me-edit { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.me-edit-label { font-size: 0.78rem; color: var(--muted); flex: none; }
+.me-edit input { flex: 1; padding: 8px 12px; }
+.me-edit .small { padding: 8px 10px; }
+.avatar-picker.mini { margin-bottom: 12px; max-height: 132px; overflow-y: auto; }
+
+/* allow-bots: add-bot buttons */
+.bot-panel { margin-top: 10px; }
+.bot-panel > label { display: block; margin-bottom: 6px; }
+.bot-add-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.bot-add-row button {
+  display: inline-flex; align-items: center; gap: 6px; background: #14162f;
+  border: 1px solid #2a2d63; padding: 7px 12px; border-radius: 999px; font-size: 0.85rem;
+}
+.bot-add-row button:hover { border-color: var(--accent2); }
+
+/* in-game playback-speed slider */
+.speed-row { display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; font-size: 0.9rem; }
+.speed-row input[type=range] { flex: 1; }
+.speed-row output { color: var(--accent2); font-weight: 600; min-width: 3ch; }
+
+/* early-bonus chip in the reveal */
+.pts .bonus { color: var(--warn); font-size: 0.78rem; margin-left: 3px; }
 
 .checks { display: flex; flex-wrap: wrap; gap: 8px; }
 .checks label {

@@ -116,6 +116,34 @@ io.on('connection', (socket) => {
     }
   });
 
+  // host adds / removes a computer player
+  socket.on('bot:add', ({ level } = {}) => {
+    const room = currentRoom(socket);
+    if (room && socket.id === room.hostId && room.addBot(level)) broadcastLobby(room);
+  });
+  socket.on('bot:remove', ({ id } = {}) => {
+    const room = currentRoom(socket);
+    if (room && socket.id === room.hostId && room.removeBot(id)) broadcastLobby(room);
+  });
+
+  // anyone can call a vote to kick another (human) player
+  socket.on('vote:kick', ({ targetId } = {}) => {
+    const room = currentRoom(socket);
+    if (!room) return;
+    const res = room.voteKick(socket.id, targetId);
+    if (!res) return;
+    if (res.kicked) {
+      const target = io.sockets.sockets.get(targetId);
+      if (target) {
+        target.emit('room:kicked', {});
+        leaveRoom(target, `${res.name} was vote-kicked`);
+      }
+      broadcastLobby(room);
+    } else {
+      io.to(room.code).emit('kick:vote', res);
+    }
+  });
+
   // in-game chat — relayed to everyone in the room
   let lastChat = 0;
   socket.on('chat:send', ({ text }) => {
@@ -199,7 +227,7 @@ function joinRoom(socket, room, name, avatar, pid) {
   io.to(room.code).emit('chat:msg', { system: true, text: `${player.name} joined` });
 }
 
-function leaveRoom(socket) {
+function leaveRoom(socket, reason) {
   const code = where.get(socket.id);
   if (!code) return;
   const room = rooms.get(code);
@@ -208,12 +236,14 @@ function leaveRoom(socket) {
   if (!room) return;
   const left = room.players.get(socket.id);
   room.removePlayer(socket.id);
-  if (room.isEmpty()) {
+  // tear the room down once no humans remain (bots alone don't keep it alive)
+  if (room.isEmpty() || !room.hasHumans()) {
     room.dispose();
     rooms.delete(code);
   } else {
     broadcastLobby(room);
-    io.to(room.code).emit('chat:msg', { system: true, text: `${left ? left.name : 'A player'} left` });
+    const who = left ? left.name : 'A player';
+    io.to(room.code).emit('chat:msg', { system: true, text: reason || `${who} left` });
   }
 }
 

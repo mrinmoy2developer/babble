@@ -156,6 +156,12 @@
 
       <div class="lobby-grid">
         <div class="lobby-left">
+          <div class="me-edit">
+            <span class="me-edit-label">You</span>
+            <input id="lobby-name" maxlength="20" placeholder="your name" autocomplete="off" />
+            <button id="lobby-avatar-btn" class="ghost small" type="button" title="Change avatar"><span id="lobby-avatar-cur">🙂</span> ▾</button>
+          </div>
+          <div id="lobby-avatar-picker" class="avatar-picker mini" hidden></div>
           <h3>Players</h3>
           <ul id="player-list" class="players"></ul>
           <div class="chat lobby-chat">
@@ -211,6 +217,13 @@
           <div class="toggles adv">
             <label class="switch"><input type="checkbox" id="set-public" checked> 🌐 Public lobby (listed for anyone to join)</label>
             <label class="switch"><input type="checkbox" id="set-preview" checked> 〰️ Allow waveform preview before submitting</label>
+            <label class="switch"><input type="checkbox" id="set-earlybonus"> ⚡ Early-submission bonus (faster lock-in earns up to +15)</label>
+            <label class="switch"><input type="checkbox" id="set-bots"> 🤖 Allow bots (computer players)</label>
+          </div>
+
+          <div id="bot-panel" class="bot-panel adv" hidden>
+            <label>Add a bot</label>
+            <div id="bot-add-row" class="bot-add-row"></div>
           </div>
         </div>
       </div>
@@ -235,6 +248,9 @@
           <button id="btn-replay" class="replay">▶ Play the word</button>
           <button id="btn-slow" class="ghost">🐢 Slower</button>
         </div>
+        <label class="speed-row">🔈 Playback speed <output id="speed-out">1.0×</output>
+          <input id="speed" type="range" min="0.5" max="1.5" step="0.05" value="1" />
+        </label>
         <p class="listen-hint">Replay as many times as you like. <span id="syl-hint"></span></p>
         <p id="think-word" class="thinking" hidden><span class="baby">👶</span> babbling it out slower…</p>
       </div>

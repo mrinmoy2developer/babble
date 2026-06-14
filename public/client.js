@@ -54,29 +54,37 @@
       el.innerHTML = `${avatarSpan(me.avatar)} <b>${escapeHtml(me.name || 'You')}</b> · ${profile.games} game${profile.games > 1 ? 's' : ''} played · best <b>${profile.best || 0}</b> · 🏆 ${profile.wins || 0} win${profile.wins === 1 ? '' : 's'}`;
     } else { el.textContent = ''; }
   }
-  function buildAvatarPicker() {
-    const box = $('avatar-picker');
+  // choosing an avatar updates state, both pickers, the lobby chip, and the room
+  function chooseAvatar(a) {
+    me.avatar = a;
+    localStorage.setItem('babble.avatar', a);
+    socket.emit('player:avatar', { avatar: a }); // live-update if already in a room
+    document.querySelectorAll('#avatar-picker button, #lobby-avatar-picker button')
+      .forEach((x) => x.classList.toggle('sel', x.dataset.av === a));
+    const cur = $('lobby-avatar-cur'); if (cur) cur.textContent = a;
+    renderProfile();
+    sfx.blip(660, 0.06);
+  }
+  function buildAvatarPicker(boxId) {
+    const box = $(boxId);
+    if (!box) return;
     box.innerHTML = '';
     AVATARS.forEach((a) => {
       const b = document.createElement('button');
-      b.type = 'button'; b.textContent = a;
+      b.type = 'button'; b.textContent = a; b.dataset.av = a;
       if (a === me.avatar) b.classList.add('sel');
-      b.onclick = () => {
-        me.avatar = a;
-        localStorage.setItem('babble.avatar', a);
-        box.querySelectorAll('button').forEach((x) => x.classList.toggle('sel', x === b));
-        socket.emit('player:avatar', { avatar: a }); // live-update if already in a room
-        renderProfile();
-        sfx.blip(660, 0.06);
-      };
+      b.onclick = () => chooseAvatar(a);
       box.appendChild(b);
     });
   }
-  buildAvatarPicker();
+  buildAvatarPicker('avatar-picker');
+  buildAvatarPicker('lobby-avatar-picker');
   let state = null; // last room snapshot
   let current = { audio: '', buffer: null }; // current round target
   let answerLang = 'en';
   let previewWaves = true;
+  let playRate = 1; // in-game playback speed (per-player; 0.5×–1.5×)
+  let kickTally = {}; // targetId -> { votes, needed } for the lobby kick display
   let timerInt = null;
   let lastTickSec = -1;
   let paused = false;
@@ -124,6 +132,7 @@
     if (activeViz) { activeViz.stop(); activeViz = null; } // also halt a waveform player
     const src = c.createBufferSource();
     src.buffer = buf;
+    src.playbackRate.value = playRate;
     src.connect(c.destination);
     src.onended = () => { if (simpleSrc === src) simpleSrc = null; };
     simpleSrc = src;
@@ -168,7 +177,7 @@
     canvas = fresh;
     const dpr = window.devicePixelRatio || 1;
     const dur = buffer.duration;
-    let src = null, t0 = 0, off = 0, raf = null, playing = false, scrub = null;
+    let src = null, t0 = 0, off = 0, raf = null, playing = false, scrub = null, curRate = 1;
 
     const drawStatic = () => {
       drawWave(canvas, ghost, { color: '#7c5cff', alpha: 0.28, clear: true });
@@ -190,7 +199,7 @@
     };
     const frame = () => {
       if (!playing) return;
-      const t = off + (ctx().currentTime - t0);
+      const t = off + (ctx().currentTime - t0) * curRate; // buffer pos advances at the playback rate
       if (t >= dur) { drawAt(dur); stop(); setTimeout(reset, 450); return; }
       drawAt(t); raf = requestAnimationFrame(frame);
     };
@@ -200,7 +209,8 @@
       activeViz = api;
       stop();
       const c = ctx(); if (!c) return;
-      src = c.createBufferSource(); src.buffer = buffer; src.connect(c.destination);
+      curRate = playRate;
+      src = c.createBufferSource(); src.buffer = buffer; src.playbackRate.value = curRate; src.connect(c.destination);
       off = Math.max(0, Math.min(dur, offset)); t0 = c.currentTime;
       src.start(0, off); playing = true; frame();
     };
@@ -863,14 +873,43 @@
     $('room-code').textContent = s.code;
     answerLang = s.settings.answerLang;
 
+    const isHostNow = s.hostId === me.id;
+    const botLabel = (key) => { const l = (s.botLevels || []).find((x) => x.key === key); return l ? l.label : 'Bot'; };
     const ul = $('player-list');
     ul.innerHTML = '';
     s.players.forEach((p) => {
       const li = document.createElement('li');
-      li.innerHTML = `<span>${p.id === me.id ? '➤ ' : ''}${avatarSpan(p.avatar)} ${escapeHtml(p.name)}</span>` +
-        `<span>${p.isHost ? '<span class="crown">👑 host</span>' : ''}</span>`;
+      let right = p.isHost ? '<span class="crown">👑</span>' : '';
+      if (p.isBot) {
+        right += `<span class="bot-tag">🤖 ${escapeHtml(botLabel(p.botLevel))}</span>`;
+        if (isHostNow) right += `<button class="botx-btn" data-bot="${p.id}" title="Remove bot">✕</button>`;
+      } else if (p.id !== me.id) {
+        const v = kickTally[p.id];
+        if (v) right += `<span class="kick-votes">${v.votes}/${v.needed}</span>`;
+        right += `<button class="kick-btn" data-kick="${p.id}" title="Vote to kick">Kick</button>`;
+      }
+      li.innerHTML =
+        `<span class="pl-main">${p.id === me.id ? '➤ ' : ''}${avatarSpan(p.avatar)} ${escapeHtml(p.name)}` +
+        `${p.id === me.id ? ' <small class="muted">(you)</small>' : ''}</span>` +
+        `<span class="pl-right">${right}</span>`;
       ul.appendChild(li);
     });
+    ul.querySelectorAll('[data-kick]').forEach((b) => { b.onclick = () => socket.emit('vote:kick', { targetId: b.dataset.kick }); });
+    ul.querySelectorAll('[data-bot]').forEach((b) => { b.onclick = () => socket.emit('bot:remove', { id: b.dataset.bot }); });
+
+    // bot-add panel (host only, when bots are allowed)
+    const botPanel = $('bot-panel');
+    botPanel.hidden = !(isHostNow && s.settings.allowBots);
+    if (!botPanel.hidden && s.botLevels && $('bot-add-row').dataset.built !== '1') {
+      const row = $('bot-add-row'); row.innerHTML = '';
+      s.botLevels.forEach((l) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.innerHTML = `${l.avatar} ${escapeHtml(l.label)}`;
+        b.onclick = () => socket.emit('bot:add', { level: l.key });
+        row.appendChild(b);
+      });
+      $('bot-add-row').dataset.built = '1';
+    }
 
     const box = $('source-checks');
     if (box.dataset.built !== '1') {
@@ -913,6 +952,12 @@
     setRange('diff', 'diff-out', s.settings.difficulty);
     setCheck('set-public', s.settings.visibility === 'public');
     setCheck('set-preview', s.settings.previewWaves);
+    setCheck('set-earlybonus', !!s.settings.earlyBonus);
+    setCheck('set-bots', !!s.settings.allowBots);
+
+    // "you" editor reflects current name + avatar
+    setIfIdle('lobby-name', me.name || '');
+    $('lobby-avatar-cur').textContent = me.avatar;
 
     const isHost = s.hostId === me.id;
     $('settings').classList.toggle('locked', !isHost);
@@ -940,6 +985,8 @@
       difficulty: +$('diff').value,
       visibility: $('set-public').checked ? 'public' : 'private',
       previewWaves: $('set-preview').checked,
+      earlyBonus: $('set-earlybonus').checked,
+      allowBots: $('set-bots').checked,
     });
   }
   ['answer-lang', 'rounds', 'secs', 'reveal', 'diff'].forEach((id) => {
@@ -953,7 +1000,21 @@
   });
   $('set-public').onchange = pushSettings;
   $('set-preview').onchange = pushSettings;
+  $('set-earlybonus').onchange = pushSettings;
+  $('set-bots').onchange = pushSettings;
   $('voice-select').onchange = pushSettings;
+
+  // lobby "you" editor — rename + restyle yourself after joining
+  let nameDeb = null;
+  $('lobby-name').addEventListener('input', () => {
+    const n = $('lobby-name').value.trim();
+    if (!n) return;
+    me.name = n; localStorage.setItem('babble.name', n);
+    $('name-input').value = n; // keep the join screen in sync
+    clearTimeout(nameDeb);
+    nameDeb = setTimeout(() => socket.emit('player:name', { name: n }), 300);
+  });
+  $('lobby-avatar-btn').onclick = () => { const pk = $('lobby-avatar-picker'); pk.hidden = !pk.hidden; };
 
   // Simple/Advanced settings view (a per-player UI preference, not a room setting)
   function setMode(pro) {
@@ -998,6 +1059,19 @@
       if (res && res.audio) playB64(res.audio);
     });
   };
+
+  // in-game playback speed (per-player; remembered across rounds)
+  const fmtRate = (r) => r.toFixed(2).replace(/0$/, '') + '×';
+  (function initSpeed() {
+    const saved = parseFloat(localStorage.getItem('babble.speed'));
+    if (saved >= 0.5 && saved <= 1.5) playRate = saved;
+    $('speed').value = playRate; $('speed-out').textContent = fmtRate(playRate);
+  })();
+  $('speed').addEventListener('input', () => {
+    playRate = parseFloat($('speed').value) || 1;
+    $('speed-out').textContent = fmtRate(playRate);
+    localStorage.setItem('babble.speed', String(playRate));
+  });
 
   $('btn-hear-self').onclick = () => {
     const text = $('guess-input').value.trim();
@@ -1097,7 +1171,16 @@
 
   // ----- socket events -----------------------------------------------------
   socket.on('connect', () => { me.id = socket.id; refreshRooms(); });
-  socket.on('room:joined', (s) => { me.id = s.you; renderLobby(s); });
+  socket.on('room:joined', (s) => { me.id = s.you; kickTally = {}; renderLobby(s); });
+  socket.on('kick:vote', (d) => {
+    kickTally[d.targetId] = { votes: d.votes, needed: d.needed };
+    if (activeName() === 'lobby' && state) renderLobby(state);
+    toast(`🗳️ ${d.votes}/${d.needed} votes to kick ${escapeHtml(d.name)}`);
+  });
+  socket.on('room:kicked', () => {
+    toast('🚫 You were removed from the room');
+    setTimeout(() => location.reload(), 1200);
+  });
   socket.on('room:update', (s) => {
     if (['lobby', 'over'].includes(activeName())) renderLobby(s);
     else { state = s; syncHostControls(); }
@@ -1182,8 +1265,9 @@
         `<span class="rank">${medal(i)}</span>` +
         `<button class="play-btn" ${r.audio ? '' : 'disabled'} title="Play guess">▶</button>` +
         `<span class="who">${avatarSpan(r.avatar)} ${escapeHtml(r.name)}${r.id === me.id ? ' (you)' : ''}` +
+        `${r.isBot ? ' <span class="bot-tag">🤖</span>' : ''}` +
         `<span class="guessed"> — “${r.guess ? spanLetters(r.guess) : '—'}”</span></span>` +
-        `<span class="pts">+${r.points}</span>` +
+        `<span class="pts">+${r.points}${r.bonus ? `<span class="bonus" title="early-submission bonus">⚡+${r.bonus}</span>` : ''}</span>` +
         `<span class="total">${r.total} pts</span>` +
         `<canvas class="wave"></canvas>`;
       ul.appendChild(li);
