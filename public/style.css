@@ -132,11 +132,11 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .chat h3 { margin-bottom: 6px; }
 .chat-list {
   list-style: none; margin: 0 0 8px; padding: 8px 10px; flex: 1; overflow-y: auto;
-  background: #11132b; border: 1px solid #2a2d63; border-radius: 10px; min-height: 120px;
+  background: #11132b; border: 1px solid #2a2d63; border-radius: 10px; min-height: 160px;
 }
 /* cap the lobby chat so new messages scroll inside the box instead of growing
    the column (which stretched the settings panel beside it) */
-.lobby-chat .chat-list { max-height: 240px; }
+.lobby-chat .chat-list { min-height: 200px; max-height: 320px; }
 .chat-list li { margin-bottom: 5px; font-size: 0.9rem; line-height: 1.35; word-break: break-word; }
 .chat-list .c-name { font-weight: 600; color: var(--accent2); }
 .chat-list .c-sys { color: var(--muted); font-style: italic; font-size: 0.82rem; }
@@ -297,26 +297,30 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 }
 .flag img { width: 100%; height: 100%; object-fit: cover; }
 
-/* ---- avatars (a custom invented-script glyph in a chosen colour) ---- */
+/* ---- avatars (an invented, hand-drawn rune glyph in a chosen colour) ---- */
 .avatar { display: inline-block; font-size: 1.05em; line-height: 1; vertical-align: -0.1em; margin-right: 2px; }
 .avatar.glyph, .avatar-cur { font-weight: 800; font-family: 'Fredoka', system-ui, 'Noto Sans', 'Noto Sans CJK JP', sans-serif; }
+/* the invented runes are tiny inline SVGs that scale to the surrounding text */
+.rune-svg { width: 1em; height: 1em; display: inline-block; vertical-align: -0.18em; overflow: visible; }
+.avatar.rune { vertical-align: -0.18em; }
+.avatar-cur { display: inline-flex; align-items: center; justify-content: center; font-size: 1.3rem; }
 
 /* character + colour builder */
 .avatar-build { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 4px; }
-.avatar-picker.mini { max-height: 220px; overflow-y: auto; }
+.avatar-picker.mini { max-height: 240px; overflow-y: auto; }
 .ab-row-label { font-size: 0.72rem; color: var(--muted); margin: 2px 0 -2px; }
 .ab-colors { display: flex; flex-wrap: wrap; gap: 7px; }
 .ab-color { width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid #2a2d63; cursor: pointer; }
 .ab-color.sel { border-color: #fff; transform: scale(1.14); box-shadow: 0 0 0 2px rgba(255,255,255,.22); }
-.ab-glyphs { display: flex; flex-wrap: wrap; gap: 6px; max-height: 150px; overflow-y: auto; padding: 2px; }
+.ab-glyphs { display: flex; flex-wrap: wrap; gap: 6px; max-height: 168px; overflow-y: auto; padding: 2px; }
 .ab-glyph {
-  width: 38px; height: 38px; padding: 0; font-size: 1.3rem; font-weight: 800; line-height: 1;
-  font-family: 'Fredoka', system-ui, 'Noto Sans', 'Noto Sans CJK JP', sans-serif;
+  width: 40px; height: 40px; padding: 5px; line-height: 0;
   background: #14162f; border: 2px solid transparent; border-radius: 10px;
 }
+.ab-glyph .rune-svg { width: 100%; height: 100%; }
 .ab-glyph.sel { border-color: var(--accent2); background: #1d2046; transform: translateY(-2px); }
 .avatar-preview { display: inline-flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--muted); }
-.avatar-preview .avatar-cur { font-size: 1.8rem; }
+.avatar-preview .avatar-cur { font-size: 2rem; }
 
 /* ---- "thinking baby" while audio is generating ---- */
 .thinking { color: var(--warn); min-height: 1.2em; margin: 8px 0 0; }

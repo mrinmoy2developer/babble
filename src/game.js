@@ -484,12 +484,15 @@ function clamp(n, lo, hi) {
   return Math.max(lo, Math.min(hi, Math.round(n)));
 }
 
-// Avatars are either a custom "glyph|#rrggbb" (an invented-script character in a
-// colour) or, for older clients, a short emoji. Keep both short and harmless.
+// Avatars are "<glyph>|#rrggbb": an invented rune id ("g12") in a colour. Older
+// clients may send a unicode glyph or a bare emoji. Keep all of them short.
 function cleanAvatar(a) {
   if (typeof a !== 'string') return '';
-  const m = a.match(/^(.{1,4})\|(#[0-9a-fA-F]{6})$/);
-  if (m) return `${[...m[1]].slice(0, 2).join('')}|${m[2].toLowerCase()}`;
+  const m = a.match(/^(.{1,6})\|(#[0-9a-fA-F]{6})$/);
+  if (m) {
+    const g = /^g\d{1,3}$/.test(m[1]) ? m[1] : [...m[1]].slice(0, 2).join(''); // rune id or legacy glyph
+    return `${g}|${m[2].toLowerCase()}`;
+  }
   return [...a].slice(0, 3).join(''); // legacy emoji
 }
 
