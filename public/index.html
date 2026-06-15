@@ -92,10 +92,6 @@
     </div>
   </div>
 
-  <button id="profile-icon" class="profile-icon" type="button" title="Your profile" aria-label="Your profile">
-    <span id="profile-icon-av" class="avatar-cur"></span>
-  </button>
-
   <header class="topbar">
     <h1 class="logo" aria-label="Babble">
       <span class="logo-bubble">🗣️</span><span class="wa" style="--i:0">B</span><span class="wa" style="--i:1">a</span><span class="wa" style="--i:2">b</span><span class="wa" style="--i:3">b</span><span class="wa" style="--i:4">l</span><span class="wa" style="--i:5">e</span>
@@ -118,7 +114,11 @@
       <label>Your name
         <input id="name-input" maxlength="20" placeholder="e.g. Ada" autocomplete="off" />
       </label>
-      <p class="hint">Set your character, colour &amp; spin from the <b>👤 profile</b> button, top-left.</p>
+      <button id="join-profile-btn" class="profile-edit" type="button">
+        <span id="join-profile-av" class="avatar-cur"></span>
+        <span class="pe-text"><b>Your character</b><small>pick a glyph, colour &amp; spin</small></span>
+        <span class="pe-edit">✏️</span>
+      </button>
       <div class="row">
         <button id="btn-create" class="primary">Create room</button>
       </div>
@@ -160,6 +160,11 @@
 
       <div class="lobby-grid">
         <div class="lobby-left">
+          <button id="lobby-profile-btn" class="profile-edit" type="button">
+            <span id="lobby-profile-av" class="avatar-cur"></span>
+            <span class="pe-text"><b id="lobby-profile-name">You</b><small>tap to edit your name &amp; character</small></span>
+            <span class="pe-edit">✏️</span>
+          </button>
           <h3>Players</h3>
           <ul id="player-list" class="players"></ul>
           <div class="chat lobby-chat">

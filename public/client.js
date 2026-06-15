@@ -1038,6 +1038,7 @@
     setCheck('set-preview', s.settings.previewWaves);
     setCheck('set-earlybonus', !!s.settings.earlyBonus);
     setCheck('set-bots', !!s.settings.allowBots);
+    updateProfileBtn();
 
     const isHost = s.hostId === me.id;
     $('settings').classList.toggle('locked', !isHost);
@@ -1117,10 +1118,13 @@
     const n = $('pf-name').value.trim(); if (!n) return;
     me.name = n; localStorage.setItem('babble.name', n);
     const ni = $('name-input'); if (ni) ni.value = n;
+    updateProfileBtn();
     clearTimeout(pfNameDeb); pfNameDeb = setTimeout(() => socket.emit('player:name', { name: n }), 300);
   });
+  function updateProfileBtn() { const n = $('lobby-profile-name'); if (n) n.textContent = me.name || 'You'; }
   function openProfile() { $('pf-name').value = me.name || ''; $('profile-modal').classList.add('on'); knob.place(); }
-  $('profile-icon').onclick = openProfile;
+  $('lobby-profile-btn').onclick = openProfile;
+  if ($('join-profile-btn')) $('join-profile-btn').onclick = openProfile;
   $('profile-close').onclick = () => $('profile-modal').classList.remove('on');
   $('profile-modal').addEventListener('click', (e) => { if (e.target === $('profile-modal')) $('profile-modal').classList.remove('on'); });
   // keep me.name + the modal in sync when typing the name on the join screen
@@ -1128,6 +1132,7 @@
     me.name = $('name-input').value.trim();
     localStorage.setItem('babble.name', me.name);
     const pf = $('pf-name'); if (pf) pf.value = me.name;
+    updateProfileBtn();
   });
 
   // Simple/Advanced settings view (a per-player UI preference, not a room setting)
