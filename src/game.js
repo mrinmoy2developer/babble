@@ -484,14 +484,17 @@ function clamp(n, lo, hi) {
   return Math.max(lo, Math.min(hi, Math.round(n)));
 }
 
-// Avatars are "<glyph>|#rrggbb": an invented rune id ("g12") in a colour. Older
-// clients may send a unicode glyph or a bare emoji. Keep all of them short.
+// Avatars are "<glyph>|#rrggbb|<dir>|<speed>": an Egyptian hieroglyph in a colour
+// that spins (dir c/a, speed 0-100). Older clients may send fewer fields or a
+// bare emoji. Keep all of them short and well-formed.
 function cleanAvatar(a) {
   if (typeof a !== 'string') return '';
-  const m = a.match(/^(.{1,6})\|(#[0-9a-fA-F]{6})$/);
-  if (m) {
-    const g = /^g\d{1,3}$/.test(m[1]) ? m[1] : [...m[1]].slice(0, 2).join(''); // rune id or legacy glyph
-    return `${g}|${m[2].toLowerCase()}`;
+  const parts = a.split('|');
+  if (parts.length >= 2 && /^#[0-9a-fA-F]{6}$/.test(parts[1])) {
+    const g = /^g\d{1,3}$/.test(parts[0]) ? parts[0] : [...parts[0]].slice(0, 2).join('');
+    const dir = parts[2] === 'a' ? 'a' : 'c';
+    const speed = parts.length >= 4 ? Math.max(0, Math.min(100, Math.round(Number(parts[3]) || 0))) : 45;
+    return `${g}|${parts[1].toLowerCase()}|${dir}|${speed}`;
   }
   return [...a].slice(0, 3).join(''); // legacy emoji
 }

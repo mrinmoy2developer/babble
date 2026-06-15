@@ -28,29 +28,48 @@
 
   // ----- local state -------------------------------------------------------
   // Avatars are real Egyptian hieroglyphs (Unicode, rendered with the Noto Sans
-  // Egyptian Hieroglyphs web font) in a separately-chosen colour, stored as
-  // "glyph|#rrggbb". The glyphs slowly rotate (see .avatar.glyph in style.css).
+  // Egyptian Hieroglyphs web font) in a separately-chosen colour, each slowly
+  // spinning at a chosen direction + speed. Stored as "glyph|#rrggbb|dir|speed"
+  // (dir: c=clockwise, a=anticlockwise; speed 0-100).
   const COLORS = ['#ff6b81', '#00d4b8', '#ffb454', '#8a7bff', '#3ddc97', '#ff9bd6',
     '#5ad1ff', '#ffd24d', '#b491ff', '#ff5d73', '#36d399', '#7c5cff'];
-  const HIERO_CP = [
-    0x13000, 0x13012, 0x1301C, 0x13035, 0x13050, 0x13076, 0x13079, 0x13080, 0x130A7, 0x130C0,
-    0x130ED, 0x130F5, 0x13100, 0x1313F, 0x13153, 0x13171, 0x13191, 0x13193, 0x131A3, 0x131CB,
-    0x131F3, 0x13216, 0x13250, 0x13283, 0x132AA, 0x132F9, 0x13313, 0x13333, 0x1335B, 0x133CF,
-  ];
+  // a broad spread across the Egyptian Hieroglyphs block (people, animals, plants,
+  // objects…) — stepping keeps near-identical sign variants from clustering.
+  const HIERO_CP = [];
+  for (let cp = 0x13000; cp < 0x132FB; cp += 7) HIERO_CP.push(cp);
+  [0x132F9, 0x13080, 0x131CB, 0x13216].forEach((cp) => { if (!HIERO_CP.includes(cp)) HIERO_CP.push(cp); }); // ankh, eye, reed, water
   const GLYPHS = HIERO_CP.map((cp) => String.fromCodePoint(cp));
   const rand = (a) => a[Math.floor(Math.random() * a.length)];
+  const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+  const REDUCED = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
   function parseAvatar(a) {
-    const m = String(a || '').match(/^(.+)\|(#[0-9a-fA-F]{6})$/);
-    return m ? { glyph: m[1], color: m[2] } : null;
+    const parts = String(a || '').split('|');
+    if (parts.length >= 2 && /^#[0-9a-fA-F]{6}$/.test(parts[1])) {
+      return {
+        glyph: parts[0], color: parts[1].toLowerCase(),
+        dir: parts[2] === 'a' ? 'a' : 'c',
+        speed: parts.length >= 4 ? clamp(parseInt(parts[3], 10) || 0, 0, 100) : 45,
+      };
+    }
+    return null;
   }
-  const composeAvatar = (g, c) => `${g}|${c}`;
+  const composeAvatar = (g, c, dir, speed) => `${g}|${c}|${dir}|${speed}`;
+  // the per-avatar spin, expressed as an inline animation
+  function spinStyle(p) {
+    if (!p.speed || REDUCED) return '';
+    const dur = (40 - (p.speed / 100) * 36).toFixed(2); // 100% → 4s … low → ~40s
+    return `animation:avatarSpin ${dur}s linear infinite ${p.dir === 'a' ? 'reverse' : 'normal'};`;
+  }
 
   const me = { id: null, name: localStorage.getItem('babble.name') || '' };
   {
     let pa = parseAvatar(localStorage.getItem('babble.avatar'));
-    if (!pa || !GLYPHS.includes(pa.glyph)) pa = { glyph: rand(GLYPHS), color: (pa && pa.color) || rand(COLORS) };
-    me.glyph = pa.glyph; me.color = pa.color; me.avatar = composeAvatar(me.glyph, me.color);
+    if (!pa || !GLYPHS.includes(pa.glyph)) {
+      pa = { glyph: rand(GLYPHS), color: (pa && pa.color) || rand(COLORS), dir: (pa && pa.dir) || 'c', speed: pa ? pa.speed : 45 };
+    }
+    Object.assign(me, { glyph: pa.glyph, color: pa.color, dir: pa.dir, speed: pa.speed });
+    me.avatar = composeAvatar(me.glyph, me.color, me.dir, me.speed);
     localStorage.setItem('babble.avatar', me.avatar);
   }
   // a stable, public profile id so a player's stats follow them across games
@@ -69,7 +88,7 @@
   }
   const avatarSpan = (a) => {
     const p = parseAvatar(a);
-    if (p) return `<span class="avatar glyph" style="color:${p.color}">${escapeHtml(p.glyph)}</span>`;
+    if (p) return `<span class="avatar glyph" style="color:${p.color};${spinStyle(p)}">${escapeHtml(p.glyph)}</span>`;
     return a ? `<span class="avatar">${escapeHtml(a)}</span>` : ''; // legacy emoji
   };
   // a small persistent profile (offline; "Sign in with Google" could sync this later)
@@ -108,9 +127,9 @@
   }
   // paint a "current avatar" chip with the chosen rune + colour
   function paintAvatarCur(el) { el.innerHTML = avatarSpan(me.avatar); }
-  // apply the current glyph+colour everywhere and tell the room
+  // apply the current glyph+colour+spin everywhere and tell the room
   function commitAvatar() {
-    me.avatar = composeAvatar(me.glyph, me.color);
+    me.avatar = composeAvatar(me.glyph, me.color, me.dir, me.speed);
     localStorage.setItem('babble.avatar', me.avatar);
     socket.emit('player:avatar', { avatar: me.avatar }); // live-update if already in a room
     document.querySelectorAll('.ab-color').forEach((x) => x.classList.toggle('sel', x.dataset.color === me.color));
@@ -119,8 +138,7 @@
     renderProfile();
     sfx.blip(660, 0.06);
   }
-  buildAvatarPicker('avatar-picker');
-  buildAvatarPicker('lobby-avatar-picker');
+  buildAvatarPicker('pf-picker');
   document.querySelectorAll('.avatar-cur').forEach(paintAvatarCur);
   let state = null; // last room snapshot
   let current = { audio: '', buffer: null }; // current round target
@@ -1021,10 +1039,6 @@
     setCheck('set-earlybonus', !!s.settings.earlyBonus);
     setCheck('set-bots', !!s.settings.allowBots);
 
-    // "you" editor reflects current name + avatar
-    setIfIdle('lobby-name', me.name || '');
-    paintAvatarCur($('lobby-avatar-cur'));
-
     const isHost = s.hostId === me.id;
     $('settings').classList.toggle('locked', !isHost);
     $('btn-start').style.display = isHost ? '' : 'none';
@@ -1070,17 +1084,51 @@
   $('set-bots').onchange = pushSettings;
   $('voice-select').onchange = pushSettings;
 
-  // lobby "you" editor — rename + restyle yourself after joining
-  let nameDeb = null;
-  $('lobby-name').addEventListener('input', () => {
-    const n = $('lobby-name').value.trim();
-    if (!n) return;
+  // ----- profile modal (name + animated hieroglyph avatar) -----------------
+  let pfNameDeb = null;
+  const knob = (() => {
+    const k = $('pf-knob');
+    function place() {
+      const ang = -135 + (me.speed / 100) * 270;
+      k.querySelector('.knob-ind').style.transform = `rotate(${ang}deg)`;
+      $('pf-speed-val').textContent = me.speed + '%';
+      k.setAttribute('aria-valuenow', me.speed);
+    }
+    function setFrom(e) {
+      const r = k.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      let deg = Math.atan2(e.clientX - cx, -(e.clientY - cy)) * 180 / Math.PI; // 0 at top, + clockwise
+      deg = clamp(deg, -135, 135);
+      me.speed = Math.round((deg + 135) / 270 * 100);
+      place(); commitAvatar();
+    }
+    let drag = false;
+    k.addEventListener('pointerdown', (e) => { drag = true; try { k.setPointerCapture(e.pointerId); } catch (_) {} setFrom(e); });
+    k.addEventListener('pointermove', (e) => { if (drag) setFrom(e); });
+    k.addEventListener('pointerup', () => { drag = false; });
+    k.addEventListener('keydown', (e) => {
+      let d = 0; if (['ArrowRight', 'ArrowUp'].includes(e.key)) d = 5; if (['ArrowLeft', 'ArrowDown'].includes(e.key)) d = -5;
+      if (d) { e.preventDefault(); me.speed = clamp(me.speed + d, 0, 100); place(); commitAvatar(); }
+    });
+    return { place };
+  })();
+  $('pf-preview').onclick = () => { me.dir = me.dir === 'c' ? 'a' : 'c'; commitAvatar(); }; // tap avatar = flip spin
+  $('pf-name').addEventListener('input', () => {
+    const n = $('pf-name').value.trim(); if (!n) return;
     me.name = n; localStorage.setItem('babble.name', n);
-    $('name-input').value = n; // keep the join screen in sync
-    clearTimeout(nameDeb);
-    nameDeb = setTimeout(() => socket.emit('player:name', { name: n }), 300);
+    const ni = $('name-input'); if (ni) ni.value = n;
+    clearTimeout(pfNameDeb); pfNameDeb = setTimeout(() => socket.emit('player:name', { name: n }), 300);
   });
-  $('lobby-avatar-btn').onclick = () => { const pk = $('lobby-avatar-picker'); pk.hidden = !pk.hidden; };
+  function openProfile() { $('pf-name').value = me.name || ''; $('profile-modal').classList.add('on'); knob.place(); }
+  $('profile-icon').onclick = openProfile;
+  $('profile-close').onclick = () => $('profile-modal').classList.remove('on');
+  $('profile-modal').addEventListener('click', (e) => { if (e.target === $('profile-modal')) $('profile-modal').classList.remove('on'); });
+  // keep me.name + the modal in sync when typing the name on the join screen
+  $('name-input').addEventListener('input', () => {
+    me.name = $('name-input').value.trim();
+    localStorage.setItem('babble.name', me.name);
+    const pf = $('pf-name'); if (pf) pf.value = me.name;
+  });
 
   // Simple/Advanced settings view (a per-player UI preference, not a room setting)
   function setMode(pro) {

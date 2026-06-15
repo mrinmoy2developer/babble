@@ -298,15 +298,20 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .flag img { width: 100%; height: 100%; object-fit: cover; }
 
 /* ---- avatars (a real Egyptian hieroglyph in a chosen colour, slowly spinning) ---- */
-.avatar { display: inline-block; font-size: 1.05em; line-height: 1; vertical-align: -0.1em; margin-right: 2px; }
+.avatar { display: inline-block; vertical-align: middle; margin-right: 2px; }
 .avatar.glyph, .avatar-cur, .ab-glyph {
   font-family: 'Noto Sans Egyptian Hieroglyphs', 'Fredoka', system-ui, sans-serif;
 }
-/* the glyph slowly rotates wherever an avatar is shown (not in the picker grid) */
 @keyframes avatarSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-.avatar.glyph { animation: avatarSpin 16s linear infinite; }
-@media (prefers-reduced-motion: reduce) { .avatar.glyph { animation: none; } }
-.avatar-cur { display: inline-flex; align-items: center; justify-content: center; font-size: 1.3rem; }
+/* a centred square box so the glyph spins about its own middle (no wobble), sized
+   a little larger than the glyph + a margin so the rotation never clips neighbours.
+   the actual animation (duration/direction) is set inline per avatar in JS. */
+.avatar.glyph {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.4em; height: 1.4em; line-height: 1; margin: 0 0.12em;
+  vertical-align: middle; transform-origin: 50% 50%;
+}
+.avatar-cur { display: inline-flex; align-items: center; justify-content: center; }
 
 /* character + colour builder */
 .avatar-build { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 4px; }
@@ -472,7 +477,37 @@ canvas.chart { width: 100%; height: 150px; display: block; background: #11132b; 
 .intro.on { display: flex; }
 /* while the intro is up, hide the page content so only the animated letters
    show through its translucent background (not the join card) */
-#intro.on ~ .topbar, #intro.on ~ #app { visibility: hidden; }
+#intro.on ~ .topbar, #intro.on ~ #app, #intro.on ~ .profile-icon { visibility: hidden; }
+
+/* top-left profile button + its modal */
+.profile-icon {
+  position: fixed; top: 12px; left: 12px; z-index: 86;
+  width: 48px; height: 48px; padding: 0; border-radius: 50%; font-size: 1.3rem;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #1b1d3e, #14162f); border: 2px solid #34387a;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .4);
+}
+.profile-icon:hover { border-color: var(--accent2); }
+.profile-box { max-width: 460px; width: 100%; text-align: left; max-height: 88vh; overflow-y: auto; }
+.pf-spin { display: flex; align-items: center; gap: 24px; margin: 14px 0 6px; flex-wrap: wrap; }
+.pf-preview-wrap { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.pf-preview {
+  width: 76px; height: 76px; border-radius: 16px; padding: 0; font-size: 2.5rem;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  background: #11132b; border: 1px solid #2a2d63;
+}
+.pf-preview:hover { border-color: var(--accent2); }
+.pf-hint { font-size: 0.7rem; color: var(--muted); }
+.knob-wrap { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+.knob {
+  width: 64px; height: 64px; border-radius: 50%; position: relative; cursor: grab; touch-action: none;
+  background: radial-gradient(circle at 50% 32%, #2a2e63, #14162f 72%); border: 2px solid #3a3e80;
+}
+.knob:active { cursor: grabbing; }
+.knob:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
+.knob-ind { position: absolute; left: 50%; top: 7px; width: 4px; height: 16px; margin-left: -2px; background: var(--accent2); border-radius: 2px; transform-origin: 50% 25px; }
+.knob-label { font-size: 0.78rem; color: var(--muted); }
+.knob-label b { color: var(--accent2); }
 .intro.fade-out { animation: introOut 0.5s ease forwards; }
 @keyframes introOut { to { opacity: 0; transform: scale(1.04); visibility: hidden; } }
 .intro-card { text-align: center; max-width: 640px; }

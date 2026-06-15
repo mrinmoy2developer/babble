@@ -92,6 +92,10 @@
     </div>
   </div>
 
+  <button id="profile-icon" class="profile-icon" type="button" title="Your profile" aria-label="Your profile">
+    <span id="profile-icon-av" class="avatar-cur"></span>
+  </button>
+
   <header class="topbar">
     <h1 class="logo" aria-label="Babble">
       <span class="logo-bubble">🗣️</span><span class="wa" style="--i:0">B</span><span class="wa" style="--i:1">a</span><span class="wa" style="--i:2">b</span><span class="wa" style="--i:3">b</span><span class="wa" style="--i:4">l</span><span class="wa" style="--i:5">e</span>
@@ -114,9 +118,7 @@
       <label>Your name
         <input id="name-input" maxlength="20" placeholder="e.g. Ada" autocomplete="off" />
       </label>
-      <label>Make your character</label>
-      <div class="avatar-preview">Preview: <span id="join-avatar-cur" class="avatar-cur">あ</span></div>
-      <div id="avatar-picker" class="avatar-picker"></div>
+      <p class="hint">Set your character, colour &amp; spin from the <b>👤 profile</b> button, top-left.</p>
       <div class="row">
         <button id="btn-create" class="primary">Create room</button>
       </div>
@@ -158,12 +160,6 @@
 
       <div class="lobby-grid">
         <div class="lobby-left">
-          <div class="me-edit">
-            <span class="me-edit-label">You</span>
-            <input id="lobby-name" maxlength="20" placeholder="your name" autocomplete="off" />
-            <button id="lobby-avatar-btn" class="ghost small" type="button" title="Change character"><span id="lobby-avatar-cur" class="avatar-cur">あ</span> ▾</button>
-          </div>
-          <div id="lobby-avatar-picker" class="avatar-picker mini" hidden></div>
           <h3>Players</h3>
           <ul id="player-list" class="players"></ul>
           <div class="chat lobby-chat">
@@ -403,6 +399,32 @@
       </div>
 
       <p id="profiles-msg" class="muted center-msg" hidden></p>
+    </div>
+  </div>
+
+  <!-- profile settings (name + animated hieroglyph avatar) -->
+  <div id="profile-modal" class="overlay">
+    <div class="overlay-box card profile-box">
+      <div class="profiles-head">
+        <h2>👤 Your profile</h2>
+        <button id="profile-close" class="ghost small" type="button">✕ Close</button>
+      </div>
+      <label>Name
+        <input id="pf-name" maxlength="20" placeholder="your name" autocomplete="off" />
+      </label>
+      <div class="pf-spin">
+        <div class="pf-preview-wrap">
+          <button id="pf-preview" class="pf-preview avatar-cur" type="button" title="Click to flip spin direction"></button>
+          <span class="pf-hint">tap to flip direction</span>
+        </div>
+        <div class="knob-wrap">
+          <div id="pf-knob" class="knob" role="slider" tabindex="0" aria-label="Spin speed" aria-valuemin="0" aria-valuemax="100">
+            <span class="knob-ind"></span>
+          </div>
+          <span class="knob-label">Spin speed <b id="pf-speed-val">45%</b></span>
+        </div>
+      </div>
+      <div id="pf-picker" class="avatar-picker"></div>
     </div>
   </div>
 
