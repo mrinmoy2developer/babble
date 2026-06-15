@@ -167,6 +167,19 @@
           </button>
           <h3>Players</h3>
           <ul id="player-list" class="players"></ul>
+
+          <div id="mode-pick-wrap" class="mode-pick-wrap">
+            <label>Game mode <span class="host-only-tag">host only</span></label>
+            <div class="mode-pick">
+              <button id="mode-normal" class="mode-card active" type="button">
+                <b>🎧 Normal</b><small>Everyone hears the word and spells it.</small>
+              </button>
+              <button id="mode-boss" class="mode-card" type="button">
+                <b>🎙️ Boss Baby</b><small>One player relays the word; others guess their babble.</small>
+              </button>
+            </div>
+          </div>
+
           <div class="chat lobby-chat">
             <h3>💬 Chat</h3>
             <ul id="lobby-chat-list" class="chat-list"></ul>
@@ -184,16 +197,6 @@
               <button id="mode-simple" class="seg active" type="button">Simple</button>
               <button id="mode-pro" class="seg" type="button">Advanced</button>
             </div>
-          </div>
-
-          <label>Game mode</label>
-          <div class="mode-pick">
-            <button id="mode-normal" class="mode-card active" type="button">
-              <b>🎧 Normal</b><small>Everyone hears the word and spells it.</small>
-            </button>
-            <button id="mode-boss" class="mode-card" type="button">
-              <b>🍼 Boss Baby</b><small>One player relays the word; others guess their babble.</small>
-            </button>
           </div>
 
           <label>Word sources (what you'll hear)</label>
@@ -230,7 +233,7 @@
             </label>
           </div>
 
-          <label id="bossagg-row" class="adv" hidden>🍼 Boss Baby scored by
+          <label id="bossagg-row" class="adv" hidden>🎙️ Boss Baby scored by
             <select id="bossagg">
               <option value="mean">Average of the others</option>
               <option value="max">Best of the others</option>
@@ -379,7 +382,7 @@
   <!-- boss-baby waiting overlay (you're not guessing right now) -->
   <div id="boss-overlay" class="overlay">
     <div class="overlay-box">
-      <div class="big">🍼</div>
+      <div class="big">🎙️🔊</div>
       <p id="boss-overlay-msg">Waiting…</p>
       <p class="hint" id="boss-overlay-sub"></p>
     </div>

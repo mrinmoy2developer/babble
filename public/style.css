@@ -207,6 +207,9 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .pts .bonus { color: var(--warn); font-size: 0.78rem; margin-left: 3px; }
 
 /* game-mode picker + Boss Baby UI */
+.mode-pick-wrap { margin: 4px 0 8px; }
+.mode-pick-wrap > label { display: block; margin-bottom: 4px; }
+.mode-pick-wrap.locked { opacity: 0.6; pointer-events: none; }
 .mode-pick { display: flex; gap: 10px; margin: 4px 0 12px; }
 .mode-card {
   flex: 1; display: flex; flex-direction: column; gap: 3px; text-align: left;

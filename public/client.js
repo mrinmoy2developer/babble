@@ -1049,6 +1049,7 @@
 
     const isHost = s.hostId === me.id;
     $('settings').classList.toggle('locked', !isHost);
+    $('mode-pick-wrap').classList.toggle('locked', !isHost); // mode picker is host-only too
     $('btn-start').style.display = isHost ? '' : 'none';
     $('lobby-hint').textContent = isHost
       ? (s.players.length < 2 ? 'You can start solo, but it is more fun with friends!' : '')
@@ -1400,11 +1401,11 @@
     if (roundMode === 'boss') {
       const iAmBoss = me.id === curBoss;
       if (iAmBoss) {
-        setBossBanner(`🍼 <b>You're the Boss Baby!</b> Listen and babble it — everyone else guesses YOUR version. They're scored on the original; you score on how close they get.`);
+        setBossBanner(`🎙️ <b>You're the Boss Baby!</b> Listen and babble it — everyone else guesses YOUR version. They're scored on the original; you score on how close they get.`);
         current = { audio: '', buffer: null }; // the original arrives via round:audio
       } else {
-        setBossBanner(`🍼 <b>${escapeHtml(d.bossName)}</b> is the Boss Baby, listening now. Get ready to guess their babble.`);
-        showBossOverlay(`🍼 ${escapeHtml(d.bossName)} is babbling…`, 'Get ready to guess their version of the word.');
+        setBossBanner(`🎙️ <b>${escapeHtml(d.bossName)}</b> is the Boss Baby, listening now. Get ready to guess their babble.`);
+        showBossOverlay(`🎙️ ${escapeHtml(d.bossName)} is babbling…`, 'Get ready to guess their version of the word.');
       }
       return;
     }
@@ -1426,10 +1427,10 @@
     resetGuessUI();
     startTimer(d.deadline);
     if (me.id === d.bossId) {
-      setBossBanner(`🍼 <b>Your babble is out!</b> Everyone is guessing your version now — you score on how close they get to the original.`);
-      showBossOverlay('🍼 You babbled it!', 'Waiting for everyone to guess your version…');
+      setBossBanner(`🎙️ <b>Your babble is out!</b> Everyone is guessing your version now — you score on how close they get to the original.`);
+      showBossOverlay('🎙️ You babbled it!', 'Waiting for everyone to guess your version…');
     } else {
-      setBossBanner(`🍼 Guess the <b>original</b> word from <b>${escapeHtml(d.bossName)}</b>'s babble (you're scored on the original, not their version).`);
+      setBossBanner(`🎙️ Guess the <b>original</b> word from <b>${escapeHtml(d.bossName)}</b>'s babble (you're scored on the original, not their version).`);
       hideBossOverlay();
       await beginListening(d.audio);
     }
@@ -1479,7 +1480,7 @@
         `<button class="play-btn" ${r.audio ? '' : 'disabled'} title="Play guess">▶</button>` +
         `<span class="who">${avatarSpan(r.avatar)} ${escapeHtml(r.name)}${r.id === me.id ? ' (you)' : ''}` +
         `${r.isBot ? ' <span class="bot-tag">🤖</span>' : ''}` +
-        `${r.isBoss ? ' <span class="boss-badge" title="Boss Baby — scored on how close the others got">🍼 Boss</span>' : ''}` +
+        `${r.isBoss ? ' <span class="boss-badge" title="Boss Baby — scored on how close the others got">🎙️ Boss</span>' : ''}` +
         `<span class="guessed"> — “${r.guess ? spanLetters(r.guess) : '—'}”</span></span>` +
         `<span class="pts">+${r.points}${r.bonus ? `<span class="bonus" title="early-submission bonus">⚡+${r.bonus}</span>` : ''}</span>` +
         `<span class="total">${r.total} pts</span>` +
