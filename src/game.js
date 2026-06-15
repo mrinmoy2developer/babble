@@ -30,8 +30,26 @@ const DEFAULT_SETTINGS = {
   previewWaves: true, // let players see/compare waveforms before submitting
   earlyBonus: false,  // award a small speed bonus, proportional to how early you lock in
   allowBots: false,   // let the host add computer players
+  mode: 'normal',     // 'normal' | 'boss' (Boss Baby relay/telephone mode)
+  bossAgg: 'mean',    // how the Boss Baby is scored from the others: mean|max|median|trimmed
+  maxSubmissions: 1,  // how many guesses a player may submit per round (last one counts)
   voice: '', // piper voice id (resolved to a real default per-room below)
 };
+
+const AGG_FNS = ['mean', 'max', 'median', 'trimmed'];
+
+// combine the others' scores into the Boss Baby's score
+function aggregate(arr, fn) {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((a, b) => a - b);
+  if (fn === 'max') return Math.round(s[s.length - 1]);
+  if (fn === 'median') { const m = Math.floor(s.length / 2); return Math.round(s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2); }
+  if (fn === 'trimmed') { // truncated mean: drop the top and bottom ~20%
+    const k = Math.floor(s.length * 0.2); const t = s.slice(k, s.length - k); const u = t.length ? t : s;
+    return Math.round(u.reduce((a, b) => a + b, 0) / u.length);
+  }
+  return Math.round(arr.reduce((a, b) => a + b, 0) / arr.length); // mean
+}
 
 function makeCode() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -45,6 +63,7 @@ class Room {
   constructor(code, emit) {
     this.code = code;
     this.emit = emit; // broadcasts to everyone in the room
+    this.emitTo = () => {}; // server sets this to emit to one player (boss-mode audio)
     this.players = new Map(); // id -> { id, name, score, connected, isHost }
     this.hostId = null;
     this.settings = { ...DEFAULT_SETTINGS, voice: defaultVoice() };
@@ -52,6 +71,10 @@ class Room {
     this.round = 0;
     this.word = null; // { phonemes, spelling, voice, source }
     this.guesses = new Map(); // playerId -> { text, submittedAt }
+    this.phase = 'guess'; // 'guess' (normal) | 'listen' | 'relay' (boss mode)
+    this.bossId = null;   // current Boss Baby (boss mode)
+    this.relayPhonemes = null; this.relayAudio = ''; // the Boss Baby's babble
+    this._submitCounts = new Map(); // playerId -> submissions this round (for the k cap)
     this.deadline = 0;
     this.paused = false;
     this._remaining = 0; // ms left on the round clock while paused
@@ -173,6 +196,9 @@ class Room {
       s.allowBots = patch.allowBots;
       if (!patch.allowBots) this._removeAllBots(); // turning it off clears any bots
     }
+    if (patch.mode === 'normal' || patch.mode === 'boss') s.mode = patch.mode;
+    if (AGG_FNS.includes(patch.bossAgg)) s.bossAgg = patch.bossAgg;
+    if (Number.isFinite(patch.maxSubmissions)) s.maxSubmissions = clamp(patch.maxSubmissions, 1, 5);
     if (typeof patch.voice === 'string') {
       const ids = listVoices().map((v) => v.id);
       if (patch.voice === '' || ids.includes(patch.voice)) s.voice = patch.voice;
@@ -196,6 +222,8 @@ class Room {
     this.state = 'playing';
     this.paused = false;
     this.guesses.clear();
+    this._submitCounts = new Map();
+    this.relayPhonemes = null; this.relayAudio = '';
     this.word = generateWord({
       sources: this.settings.sources,
       difficulty: this.settings.difficulty,
@@ -205,28 +233,105 @@ class Room {
     this.word.audio = await synthPhonemesB64(this.word.phonemes, { voice: this.settings.voice });
     if (this.state !== 'playing') return; // round was aborted while rendering
 
-    this.deadline = Date.now() + this.settings.roundSeconds * 1000;
+    if (this.settings.mode === 'boss') return this._beginBossListen();
 
+    // normal mode: everyone hears the original and guesses it
+    this.phase = 'guess';
+    this.bossId = null;
+    this.deadline = Date.now() + this.settings.roundSeconds * 1000;
     this.emit('round:start', {
       round: this.round,
       totalRounds: this.settings.rounds,
+      mode: 'normal',
+      phase: 'guess',
       audio: this.word.audio, // base64 WAV, the only way to know the word
       source: this.word.source,
       flag: this.word.flag,
       answerLang: this.settings.answerLang,
       previewWaves: this.settings.previewWaves,
+      maxSubmissions: this.settings.maxSubmissions,
       deadline: this.deadline,
       syllables: this.word.syllables,
     });
-
     this._scheduleBots();
+    this._timer = setTimeout(() => this._reveal(), this.settings.roundSeconds * 1000);
+  }
+
+  _playerOrder() {
+    return [...this.players.values()].filter((p) => p.connected).map((p) => p.id);
+  }
+
+  // Boss Baby — phase 1: the chosen player ALONE hears the original and babbles it.
+  _beginBossListen() {
+    const order = this._playerOrder();
+    if (!order.length) return;
+    this.bossId = order[(this.round - 1) % order.length];
+    const boss = this.players.get(this.bossId);
+    this.phase = 'listen';
+    this.deadline = Date.now() + this.settings.roundSeconds * 1000;
+
+    // announce who the Boss Baby is — but never broadcast the original audio
+    this.emit('round:start', {
+      round: this.round,
+      totalRounds: this.settings.rounds,
+      mode: 'boss',
+      phase: 'listen',
+      bossId: this.bossId,
+      bossName: boss.name,
+      bossAvatar: boss.avatar,
+      source: this.word.source,
+      flag: this.word.flag,
+      answerLang: this.settings.answerLang,
+      previewWaves: this.settings.previewWaves,
+      maxSubmissions: this.settings.maxSubmissions,
+      deadline: this.deadline,
+      syllables: this.word.syllables,
+      audio: null,
+    });
+    // only the Boss Baby hears the original
+    this.emitTo(this.bossId, 'round:audio', { audio: this.word.audio });
+
+    this._scheduleBots(); // schedules the boss bot to transmit, if the boss is a bot
+    this._timer = setTimeout(() => this._beginBossRelay(), this.settings.roundSeconds * 1000);
+  }
+
+  // Boss Baby — phase 2: the boss's babble becomes the audio everyone else guesses.
+  async _beginBossRelay() {
+    if (this.state !== 'playing' || this.phase !== 'listen') return;
+    clearTimeout(this._timer);
+    this._clearBotTimers();
+    this.phase = 'relay';
+
+    const bg = this.guesses.get(this.bossId);
+    if (bg && bg.phonemes) this.relayPhonemes = bg.phonemes;       // bot boss (stored phonemes)
+    else if (bg && bg.text) this.relayPhonemes = g2p(bg.text, this.settings.answerLang);
+    else this.relayPhonemes = this.word.phonemes;                  // boss went silent — fall back
+    this.relayAudio = await synthPhonemesB64(this.relayPhonemes, { voice: this.settings.voice });
+    if (this.state !== 'playing') return;
+
+    this.deadline = Date.now() + this.settings.roundSeconds * 1000;
+    this.emit('round:relay', {
+      audio: this.relayAudio,
+      bossId: this.bossId,
+      bossName: this.players.get(this.bossId).name,
+      previewWaves: this.settings.previewWaves,
+      maxSubmissions: this.settings.maxSubmissions,
+      deadline: this.deadline,
+    });
+    this._scheduleBots(); // the non-boss bots now guess the relayed babble
     this._timer = setTimeout(() => this._reveal(), this.settings.roundSeconds * 1000);
   }
 
   // --- bot play ------------------------------------------------------------
   _scheduleBots() {
     this._clearBotTimers();
-    for (const bot of this.bots()) {
+    let bots = this.bots();
+    if (this.settings.mode === 'boss') {
+      bots = this.phase === 'listen'
+        ? bots.filter((b) => b.id === this.bossId)   // only the boss (if a bot) transmits now
+        : bots.filter((b) => b.id !== this.bossId);  // everyone but the boss guesses the relay
+    }
+    for (const bot of bots) {
       // lock in somewhere in the first 30–85% of the round (sharper bots sooner)
       const frac = 0.3 + Math.random() * 0.55 - (bot.skill - 0.5) * 0.15;
       const delay = Math.max(800, this.settings.roundSeconds * 1000 * Math.max(0.15, Math.min(0.9, frac)));
@@ -241,22 +346,61 @@ class Room {
       this._botTimers.push(setTimeout(() => this._botSubmit(id), 1000));
       return;
     }
-    if (this.guesses.has(id)) return;
-    const phonemes = botGuessPhonemes(this.word.phonemes, bot.skill);
+    const prev = this.guesses.get(id);
+    if (prev && prev.final) return;
+    // which sound is the bot reproducing? the original (normal / boss-listen) or
+    // the relayed babble (boss-relay)?
+    let src = this.word.phonemes;
+    if (this.settings.mode === 'boss') {
+      if (this.phase === 'listen') { if (id !== this.bossId) return; }
+      else { if (id === this.bossId) return; src = this.relayPhonemes || this.word.phonemes; }
+    }
+    const phonemes = botGuessPhonemes(src, bot.skill);
     // store the phonemes so _reveal scores/renders them directly (no g2p step)
     this.guesses.set(id, { text: phonemesToWord(phonemes), phonemes, submittedAt: Date.now(), final: true });
-    const locked = [...this.guesses.values()].filter((g) => g.final).length;
-    this.emit('guess:locked', {
-      id, name: bot.name, avatar: bot.avatar, firstLock: true, final: true, firstFinal: true,
-      submitted: this.guesses.size, locked, total: this.players.size,
-    });
-    const active = [...this.players.values()].filter((p) => p.connected);
-    if (active.length && active.every((p) => { const g = this.guesses.get(p.id); return g && g.final; })) this._reveal();
+    this._emitTally(id, bot, true, true, !prev);
+    this._maybeAdvance();
   }
 
   _clearBotTimers() {
     this._botTimers.forEach(clearTimeout);
     this._botTimers = [];
+  }
+
+  // the set of players expected to finish the current guessing phase
+  _cohort() {
+    if (this.settings.mode === 'boss') {
+      if (this.phase === 'listen') return [this.bossId].filter(Boolean);
+      return this._playerOrder().filter((cid) => cid !== this.bossId);
+    }
+    return this._playerOrder();
+  }
+
+  _emitTally(id, player, final, firstFinal, firstLock) {
+    const cohort = this._cohort();
+    const submitted = cohort.filter((cid) => this.guesses.has(cid)).length;
+    const locked = cohort.filter((cid) => { const g = this.guesses.get(cid); return g && g.final; }).length;
+    this.emit('guess:locked', {
+      id, name: player.name, avatar: player.avatar,
+      firstLock: firstLock !== false, final, firstFinal,
+      submitted, locked, total: cohort.length,
+    });
+  }
+
+  // advance the round once the right cohort has all locked in
+  _maybeAdvance() {
+    if (this.settings.mode === 'boss') {
+      if (this.phase === 'listen') {
+        const g = this.guesses.get(this.bossId);
+        if (g && g.final) this._beginBossRelay();
+      } else if (this.phase === 'relay') {
+        const others = this._cohort();
+        if (others.length && others.every((cid) => { const g = this.guesses.get(cid); return g && g.final; })) this._reveal();
+      }
+      return;
+    }
+    const active = this._cohort();
+    if (active.length && active.every((cid) => { const g = this.guesses.get(cid); return g && g.final; })) this._reveal();
   }
 
   // --- pause / resume ------------------------------------------------------
@@ -288,33 +432,25 @@ class Room {
     if (this.state !== 'playing' || this.paused) return false;
     const player = this.players.get(id);
     if (!player) return false;
-    final = !!final;
-    const prev = this.guesses.get(id);
-    const firstLock = !prev; // first time this player submits anything this round
-    const firstFinal = final && !(prev && prev.final); // first time they lock it in
-    this.guesses.set(id, { text: (text || '').toString().slice(0, 60), submittedAt: Date.now(), final });
-
-    const locked = [...this.guesses.values()].filter((g) => g.final).length;
-    // Broadcast the tally only — never the guess text. A tentative "draft" submit
-    // keeps the answer editable; a final "lock in" is what can end the round early.
-    this.emit('guess:locked', {
-      id,
-      name: player.name,
-      avatar: player.avatar,
-      firstLock,
-      final,
-      firstFinal,
-      submitted: this.guesses.size,
-      locked,
-      total: this.players.size,
-    });
-
-    // End early only once every present player has LOCKED IN (not just drafted),
-    // so a tentative submit never robs anyone of the chance to change their mind.
-    const active = [...this.players.values()].filter((p) => p.connected);
-    if (active.length && active.every((p) => { const g = this.guesses.get(p.id); return g && g.final; })) {
-      this._reveal();
+    // boss mode: only the right cohort may submit in each phase
+    if (this.settings.mode === 'boss') {
+      if (this.phase === 'listen' && id !== this.bossId) return false;
+      if (this.phase === 'relay' && id === this.bossId) return false;
     }
+    const prev = this.guesses.get(id);
+    if (prev && prev.final) return false; // already final this round — no take-backs
+
+    // count this submission against the per-round cap; the k-th (or an explicit
+    // lock-in) becomes the final, scored guess.
+    const k = this.settings.maxSubmissions || 1;
+    const count = (this._submitCounts.get(id) || 0) + 1;
+    this._submitCounts.set(id, count);
+    const isFinal = !!final || count >= k;
+    const firstFinal = isFinal && !(prev && prev.final);
+    this.guesses.set(id, { text: (text || '').toString().slice(0, 60), submittedAt: Date.now(), final: isFinal });
+
+    this._emitTally(id, player, isFinal, firstFinal, !prev);
+    this._maybeAdvance();
     return true;
   }
 
@@ -342,47 +478,61 @@ class Room {
     if (this.state !== 'playing') return;
     this.state = 'reveal';
 
+    const isBossMode = this.settings.mode === 'boss';
+    const bossId = isBossMode ? this.bossId : null;
     const target = this.word.phonemes;
     const totalMs = this.settings.roundSeconds * 1000;
+    // Every guess is scored against the ORIGINAL — even the others, who only heard
+    // the Boss Baby's relayed babble. The Boss Baby's own row records how faithful
+    // their transmission was, but their points come from the others (below).
     const results = await Promise.all(
       [...this.players.values()].map(async (p) => {
+        const isBoss = p.id === bossId;
         const g = this.guesses.get(p.id);
         const text = g ? g.text : '';
         // bots carry their phonemes directly; humans decode their typed text
         const guessPhonemes = g && g.phonemes ? g.phonemes : g2p(text, this.settings.answerLang);
         const base = text ? score(guessPhonemes, target) : 0;
-        // optional speed bonus: proportional to how early they locked in, and to
-        // how good the guess was (so spamming a junk answer early earns nothing).
+        // optional speed bonus for guessers — proportional to how early they locked
+        // in and how good the guess was (the Boss Baby doesn't get a speed bonus).
         let bonus = 0;
-        if (this.settings.earlyBonus && g && text && base > 0) {
+        if (!isBoss && this.settings.earlyBonus && g && text && base > 0) {
           const early = Math.max(0, Math.min(1, (this.deadline - g.submittedAt) / totalMs));
           bonus = Math.round(EARLY_BONUS_MAX * early * (base / 100));
         }
-        const points = base + bonus;
-        p.score += points;
-        // Render each guess from the SAME phonemes it was scored on, so the
-        // audio you hear is exactly what the comparison judged.
+        // Render each guess from the SAME phonemes it was scored on.
         const audio = text ? await synthPhonemesB64(guessPhonemes, { voice: this.settings.voice }) : '';
-        return {
-          id: p.id,
-          name: p.name,
-          avatar: p.avatar,
-          isBot: !!p.isBot,
-          guess: text,
-          phonemes: guessPhonemes,
-          audio,
-          base,
-          bonus,
-          points,
-          total: p.score,
-        };
+        return { id: p.id, name: p.name, avatar: p.avatar, isBot: !!p.isBot, isBoss,
+          guess: text, phonemes: guessPhonemes, audio, base, bonus, points: 0, total: 0 };
       })
     );
+
+    // assign points: guessers earn base+bonus; the Boss Baby earns an aggregate of
+    // how close the others got to the original (rewards a faithful transmission).
+    let bossInfo = null;
+    if (isBossMode && bossId) {
+      const others = results.filter((r) => r.id !== bossId);
+      const bossScore = aggregate(others.map((r) => r.base), this.settings.bossAgg);
+      for (const r of results) r.points = r.isBoss ? bossScore : r.base + r.bonus;
+      const bossRes = results.find((r) => r.isBoss);
+      const boss = this.players.get(bossId);
+      bossInfo = {
+        id: bossId, name: boss ? boss.name : '—', avatar: boss ? boss.avatar : '',
+        relayAudio: this.relayAudio, relayPhonemes: this.relayPhonemes,
+        guess: bossRes ? bossRes.guess : '', accuracy: bossRes ? bossRes.base : 0,
+        score: bossScore, agg: this.settings.bossAgg,
+      };
+    } else {
+      for (const r of results) r.points = r.base + r.bonus;
+    }
+    for (const r of results) { const p = this.players.get(r.id); if (p) { p.score += r.points; r.total = p.score; } }
     results.sort((a, b) => b.points - a.points);
 
     this.emit('round:reveal', {
       round: this.round,
       totalRounds: this.settings.rounds,
+      mode: this.settings.mode,
+      boss: bossInfo,
       target: {
         phonemes: target,
         audio: this.word.audio,
@@ -450,10 +600,19 @@ class Room {
       botLevels: BOT_LEVELS.map((l) => ({ key: l.key, name: l.name, avatar: l.avatar, label: l.label })),
       paused: this.paused,
       deadline: this.state === 'playing' && !this.paused ? this.deadline : 0,
-      // a mid-round joiner gets the current word's audio so they can play along
+      // a mid-round joiner plays along — but in boss mode they only get the relayed
+      // audio (never the original) and nothing at all during the listen phase.
       current:
         this.state === 'playing'
-          ? { audio: this.word.audio, source: this.word.source, previewWaves: this.settings.previewWaves }
+          ? {
+            mode: this.settings.mode,
+            phase: this.phase,
+            bossId: this.bossId,
+            bossName: this.bossId ? (this.players.get(this.bossId) || {}).name : null,
+            previewWaves: this.settings.previewWaves,
+            source: this.word.source,
+            audio: this.settings.mode === 'boss' ? (this.phase === 'relay' ? this.relayAudio : null) : this.word.audio,
+          }
           : null,
     };
   }
@@ -504,4 +663,4 @@ function cleanPid(p) {
   return typeof p === 'string' && /^[A-Za-z0-9_-]{6,64}$/.test(p) ? p : null;
 }
 
-module.exports = { Room, makeCode, DEFAULT_SETTINGS };
+module.exports = { Room, makeCode, DEFAULT_SETTINGS, aggregate };

@@ -42,6 +42,8 @@ function getOrCreateRoom(code) {
   let room = rooms.get(code);
   if (!room) {
     room = new Room(code, (event, payload) => io.to(code).emit(event, payload));
+    // emit to a single player (each socket auto-joins a room named its own id)
+    room.emitTo = (playerId, event, payload) => io.to(playerId).emit(event, payload);
     // feed each scored round / finished game into the public profile store
     room.onRoundComplete = (info) => {
       for (const row of info.rows) {

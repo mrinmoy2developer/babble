@@ -16,7 +16,7 @@
     Object.values(screens).forEach((s) => s.classList.remove('active'));
     screens[name].classList.add('active');
     $('hud').classList.toggle('on', name === 'play' || name === 'reveal');
-    if (name !== 'play') $('paused-overlay').classList.remove('on');
+    if (name !== 'play') { $('paused-overlay').classList.remove('on'); $('boss-overlay').classList.remove('on'); }
     const inGame = ['play', 'reveal', 'over'].includes(name);
     $('chat-widget').classList.toggle('on', inGame);
     if (!inGame) $('chat-panel').hidden = true;
@@ -1042,6 +1042,9 @@
     setCheck('set-preview', s.settings.previewWaves);
     setCheck('set-earlybonus', !!s.settings.earlyBonus);
     setCheck('set-bots', !!s.settings.allowBots);
+    setRange('maxsub', 'maxsub-out', s.settings.maxSubmissions || 1);
+    setIfIdle('bossagg', s.settings.bossAgg || 'mean');
+    applyModeUI(s.settings.mode || 'normal');
     updateProfileBtn();
 
     const isHost = s.hostId === me.id;
@@ -1057,6 +1060,13 @@
   function setRange(id, outId, val) { const el = $(id); if (document.activeElement !== el) el.value = val; $(outId).textContent = val; }
   function setCheck(id, val) { const el = $(id); if (document.activeElement !== el) el.checked = val; }
 
+  let uiMode = 'normal';
+  function applyModeUI(mode) {
+    uiMode = mode === 'boss' ? 'boss' : 'normal';
+    $('mode-normal').classList.toggle('active', uiMode === 'normal');
+    $('mode-boss').classList.toggle('active', uiMode === 'boss');
+    $('bossagg-row').hidden = uiMode !== 'boss'; // the aggregation choice is boss-only
+  }
   function pushSettings() {
     if (!state || state.hostId !== me.id) return;
     const sources = [...document.querySelectorAll('#source-checks input:checked')].map((c) => c.value);
@@ -1072,17 +1082,24 @@
       previewWaves: $('set-preview').checked,
       earlyBonus: $('set-earlybonus').checked,
       allowBots: $('set-bots').checked,
+      mode: uiMode,
+      bossAgg: $('bossagg').value,
+      maxSubmissions: +$('maxsub').value,
     });
   }
-  ['answer-lang', 'rounds', 'secs', 'reveal', 'diff'].forEach((id) => {
+  ['answer-lang', 'rounds', 'secs', 'reveal', 'diff', 'maxsub'].forEach((id) => {
     $(id).addEventListener('input', () => {
       if (id === 'rounds') $('rounds-out').textContent = $('rounds').value;
       if (id === 'secs') $('secs-out').textContent = $('secs').value;
       if (id === 'reveal') $('reveal-out').textContent = $('reveal').value;
       if (id === 'diff') $('diff-out').textContent = $('diff').value;
+      if (id === 'maxsub') $('maxsub-out').textContent = $('maxsub').value;
       pushSettings();
     });
   });
+  $('mode-normal').onclick = () => { applyModeUI('normal'); pushSettings(); };
+  $('mode-boss').onclick = () => { applyModeUI('boss'); pushSettings(); };
+  $('bossagg').onchange = pushSettings;
   $('set-public').onchange = pushSettings;
   $('set-preview').onchange = pushSettings;
   $('set-earlybonus').onchange = pushSettings;
@@ -1172,6 +1189,8 @@
 
   // ----- play --------------------------------------------------------------
   let origPlayer = null; // play-screen "Original" waveform player (when preview on)
+  let roundMode = 'normal', roundPhase = 'guess', curBoss = null; // current round shape
+  let maxSub = 1, mySubmits = 0; // per-round submission cap + my count
   // ▶ Play always uses a clean 1× reference; only the speed button uses the slider,
   // so reveal / next-round playback is never stuck at a previous round's speed.
   const playWordAt = (rate) => { if (origPlayer) origPlayer.play(0, rate); else playB64(current.audio, rate); };
@@ -1249,16 +1268,53 @@
   }
   function submitGuess(text, final) {
     if (lockedIn) return; // already final this round — no take-backs
+    mySubmits += 1;
+    const willLock = !!final || mySubmits >= maxSub; // the k-th submit is final
     socket.emit('guess:submit', { text, final: !!final });
-    if (final) {
+    if (willLock) {
       setLocked(true);
       $('guess-status').textContent = text ? '🔒 Locked in — waiting for the others…' : '🔒 Locked in.';
     } else {
+      const left = maxSub - mySubmits;
       $('guess-status').textContent = text
-        ? '💾 Submitted — you can keep editing and re-submit until time runs out, or 🔒 Lock in to make it final.'
+        ? `💾 Submitted (${mySubmits}/${maxSub}) — ${left} change${left === 1 ? '' : 's'} left, or 🔒 Lock in to finalise.`
         : '';
     }
   }
+  // ----- boss-mode play helpers --------------------------------------------
+  function resetGuessUI() {
+    $('guess-input').value = '';
+    setLocked(false); mySubmits = 0;
+    $('guess-status').textContent = '';
+    $('submitted-count').textContent = '';
+    $('think-word').hidden = true; $('think-guess').hidden = true;
+    $('tries-list').innerHTML = '<li class="tries-empty">Type a guess and press “Hear my guess” to stack a try here.</li>';
+  }
+  // set up the listen + preview + auto-play for a given audio clip
+  async function beginListening(audio) {
+    current = { audio, buffer: null };
+    if (origPlayer) origPlayer.stop();
+    origPlayer = null;
+    $('preview-area').classList.toggle('on', previewWaves);
+    $('guess-input').focus();
+    if (previewWaves) {
+      current.buffer = await decode(audio).catch(() => null);
+      origPlayer = makePlayer(current.buffer, $('orig-wave'), {});
+      setTimeout(playWord, 250);
+    } else {
+      setTimeout(() => playB64(audio), 250);
+    }
+  }
+  function setBossBanner(html) {
+    const b = $('boss-banner');
+    if (html) { b.innerHTML = html; b.hidden = false; } else { b.hidden = true; }
+  }
+  function showBossOverlay(msg, sub) {
+    $('boss-overlay-msg').innerHTML = msg;
+    $('boss-overlay-sub').textContent = sub || '';
+    $('boss-overlay').classList.add('on');
+  }
+  function hideBossOverlay() { $('boss-overlay').classList.remove('on'); }
   $('guess-form').addEventListener('submit', (e) => {
     e.preventDefault();
     submitGuess($('guess-input').value.trim(), false); // Enter / Submit = tentative
@@ -1323,38 +1379,59 @@
 
   socket.on('round:start', async (d) => {
     hideLoading();
-    current = { audio: d.audio, buffer: null };
+    roundMode = d.mode || 'normal';
+    roundPhase = d.phase || 'guess';
+    curBoss = d.bossId || null;
+    maxSub = d.maxSubmissions || 1;
     answerLang = d.answerLang;
     previewWaves = !!d.previewWaves;
     paused = false;
     $('paused-overlay').classList.remove('on');
+    hideBossOverlay();
     $('round-now').textContent = d.round;
     $('round-total').textContent = d.totalRounds;
     $('source-pill').innerHTML = `${flagHtml(d.flag)} ${escapeHtml(d.source)}`;
     $('syl-hint').textContent = `~${d.syllables} syllable${d.syllables > 1 ? 's' : ''}.`;
     $('guess-label').textContent = `Spell what you heard (${LANG_LABEL[answerLang] || answerLang})`;
-    $('guess-input').value = '';
-    setLocked(false); // re-enable input + buttons for the new round
-    $('guess-status').textContent = '';
-    $('submitted-count').textContent = '';
-    $('think-word').hidden = true;
-    $('think-guess').hidden = true;
-
-    // preview area
-    if (origPlayer) origPlayer.stop();
-    origPlayer = null;
-    $('preview-area').classList.toggle('on', previewWaves);
-    $('tries-list').innerHTML = '<li class="tries-empty">Type a guess and press “Hear my guess” to stack a try here.</li>';
+    resetGuessUI();
     show('play');
-    $('guess-input').focus();
     startTimer(d.deadline);
 
-    if (previewWaves) {
-      current.buffer = await decode(d.audio).catch(() => null);
-      origPlayer = makePlayer(current.buffer, $('orig-wave'), {});
-      setTimeout(playWord, 250); // auto-play once, with the moving playhead
+    if (roundMode === 'boss') {
+      const iAmBoss = me.id === curBoss;
+      if (iAmBoss) {
+        setBossBanner(`🍼 <b>You're the Boss Baby!</b> Listen and babble it — everyone else guesses YOUR version. They're scored on the original; you score on how close they get.`);
+        current = { audio: '', buffer: null }; // the original arrives via round:audio
+      } else {
+        setBossBanner(`🍼 <b>${escapeHtml(d.bossName)}</b> is the Boss Baby, listening now. Get ready to guess their babble.`);
+        showBossOverlay(`🍼 ${escapeHtml(d.bossName)} is babbling…`, 'Get ready to guess their version of the word.');
+      }
+      return;
+    }
+
+    setBossBanner(null);
+    await beginListening(d.audio); // normal: everyone hears the original
+  });
+
+  // boss mode: only the Boss Baby receives the original audio
+  socket.on('round:audio', async (d) => {
+    if (d && d.audio) await beginListening(d.audio);
+  });
+
+  // boss mode phase 2: the relayed babble — everyone but the boss now guesses it
+  socket.on('round:relay', async (d) => {
+    roundPhase = 'relay';
+    maxSub = d.maxSubmissions || maxSub;
+    previewWaves = !!d.previewWaves;
+    resetGuessUI();
+    startTimer(d.deadline);
+    if (me.id === d.bossId) {
+      setBossBanner(`🍼 <b>Your babble is out!</b> Everyone is guessing your version now — you score on how close they get to the original.`);
+      showBossOverlay('🍼 You babbled it!', 'Waiting for everyone to guess your version…');
     } else {
-      setTimeout(() => playB64(d.audio), 250);
+      setBossBanner(`🍼 Guess the <b>original</b> word from <b>${escapeHtml(d.bossName)}</b>'s babble (you're scored on the original, not their version).`);
+      hideBossOverlay();
+      await beginListening(d.audio);
     }
   });
 
@@ -1385,6 +1462,7 @@
     clearInterval(timerInt);
     if (origPlayer) origPlayer.stop();
     origPlayer = null;
+    hideBossOverlay(); setBossBanner(null);
     current = { audio: d.target.audio, buffer: null };
     $('reveal-round').textContent = d.round;
     $('reveal-source').innerHTML = `${flagHtml(d.target.flag)} ${escapeHtml(d.target.source)}`;
@@ -1401,6 +1479,7 @@
         `<button class="play-btn" ${r.audio ? '' : 'disabled'} title="Play guess">▶</button>` +
         `<span class="who">${avatarSpan(r.avatar)} ${escapeHtml(r.name)}${r.id === me.id ? ' (you)' : ''}` +
         `${r.isBot ? ' <span class="bot-tag">🤖</span>' : ''}` +
+        `${r.isBoss ? ' <span class="boss-badge" title="Boss Baby — scored on how close the others got">🍼 Boss</span>' : ''}` +
         `<span class="guessed"> — “${r.guess ? spanLetters(r.guess) : '—'}”</span></span>` +
         `<span class="pts">+${r.points}${r.bonus ? `<span class="bonus" title="early-submission bonus">⚡+${r.bonus}</span>` : ''}</span>` +
         `<span class="total">${r.total} pts</span>` +
@@ -1428,6 +1507,19 @@
     const targetLetters = [...$('reveal-phon').querySelectorAll('.kchar')];
     const targetPlayer = makePlayer(targetBuf, $('target-wave'), { letters: targetLetters });
     $('btn-replay-target').onclick = () => targetPlayer.play(0);
+
+    // Boss Baby: show the relayed babble everyone actually heard
+    if (d.mode === 'boss' && d.boss) {
+      $('reveal-boss').hidden = false;
+      $('reveal-boss-who').innerHTML = `${avatarSpan(d.boss.avatar)} <b>${escapeHtml(d.boss.name)}</b>`;
+      const relayBuf = d.boss.relayAudio ? await decode(d.boss.relayAudio).catch(() => null) : null;
+      const relayPlayer = makePlayer(relayBuf, $('relay-wave'), { ghost: targetBuf });
+      const rb = $('btn-replay-relay');
+      rb.disabled = !relayBuf;
+      if (relayBuf) rb.onclick = () => relayPlayer.play(0);
+    } else {
+      $('reveal-boss').hidden = true;
+    }
     for (const { li, r } of rows) {
       const guessBuf = r.audio ? await decode(r.audio).catch(() => null) : null;
       const player = makePlayer(guessBuf, li.querySelector('.wave'),

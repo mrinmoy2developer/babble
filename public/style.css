@@ -206,6 +206,27 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 /* early-bonus chip in the reveal */
 .pts .bonus { color: var(--warn); font-size: 0.78rem; margin-left: 3px; }
 
+/* game-mode picker + Boss Baby UI */
+.mode-pick { display: flex; gap: 10px; margin: 4px 0 12px; }
+.mode-card {
+  flex: 1; display: flex; flex-direction: column; gap: 3px; text-align: left;
+  padding: 10px 12px; border-radius: 12px; background: #14162f; border: 2px solid #2c2f63; cursor: pointer;
+}
+.mode-card b { color: var(--ink); }
+.mode-card small { color: var(--muted); font-size: 0.72rem; font-weight: 400; line-height: 1.25; }
+.mode-card.active { border-color: var(--accent2); background: #15233a; }
+.boss-banner {
+  background: linear-gradient(135deg, #3a2b53, #243a5e); border: 1px solid #4a3f80;
+  border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.95rem; line-height: 1.4;
+}
+.boss-banner b { color: var(--warn); }
+.reveal-boss { margin: 10px 0 14px; padding: 10px 12px; background: #161a33; border: 1px solid #2c2f63; border-radius: 12px; }
+.rb-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.rb-meta { color: var(--muted); font-size: 0.85rem; }
+.rb-meta b { color: var(--ink); }
+#relay-wave { width: 100%; height: 60px; display: block; }
+.results .boss-badge { font-size: 0.7rem; color: var(--warn); background: #3a2b1a; border: 1px solid #5e4a1f; padding: 2px 7px; border-radius: 999px; margin-left: 4px; }
+
 .checks { display: flex; flex-wrap: wrap; gap: 8px; }
 .checks label {
   display: inline-flex; align-items: center; gap: 6px; margin: 0;

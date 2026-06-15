@@ -186,6 +186,16 @@
             </div>
           </div>
 
+          <label>Game mode</label>
+          <div class="mode-pick">
+            <button id="mode-normal" class="mode-card active" type="button">
+              <b>🎧 Normal</b><small>Everyone hears the word and spells it.</small>
+            </button>
+            <button id="mode-boss" class="mode-card" type="button">
+              <b>🍼 Boss Baby</b><small>One player relays the word; others guess their babble.</small>
+            </button>
+          </div>
+
           <label>Word sources (what you'll hear)</label>
           <div id="source-checks" class="checks"></div>
 
@@ -215,7 +225,19 @@
             <label class="adv">Difficulty (word length) <output id="diff-out">2</output>
               <input id="diff" type="range" min="1" max="5" value="2" />
             </label>
+            <label class="adv">Max submissions / round <output id="maxsub-out">1</output>
+              <input id="maxsub" type="range" min="1" max="5" value="1" />
+            </label>
           </div>
+
+          <label id="bossagg-row" class="adv" hidden>🍼 Boss Baby scored by
+            <select id="bossagg">
+              <option value="mean">Average of the others</option>
+              <option value="max">Best of the others</option>
+              <option value="median">Median of the others</option>
+              <option value="trimmed">Truncated mean (drop extremes)</option>
+            </select>
+          </label>
 
           <div class="toggles adv">
             <label class="switch"><input type="checkbox" id="set-public" checked> 🌐 Public lobby (listed for anyone to join)</label>
@@ -245,6 +267,8 @@
         <span class="pill" id="source-pill">—</span>
         <span class="pill timer" id="timer">--</span>
       </div>
+
+      <div id="boss-banner" class="boss-banner" hidden></div>
 
       <div class="listen">
         <div class="listen-btns">
@@ -292,6 +316,15 @@
         </div>
         <canvas id="target-wave" class="wave target"></canvas>
       </div>
+
+      <div id="reveal-boss" class="reveal-boss" hidden>
+        <div class="rb-head">
+          <button id="btn-replay-relay" class="replay small">▶ The babble</button>
+          <span class="rb-meta"><span id="reveal-boss-who"></span> relayed it — others guessed <b>this</b>, but were scored on the original.</span>
+        </div>
+        <canvas id="relay-wave" class="wave"></canvas>
+      </div>
+
       <p class="legend">Each player's waveform is overlaid on the <span class="ghost-key">original</span> so you can see how close their <span class="guess-key">guess</span> sounds.</p>
       <ul id="reveal-list" class="results"></ul>
       <div class="reveal-foot">
@@ -340,6 +373,15 @@
       <div class="big">⏸ Paused</div>
       <p id="paused-sub">Waiting for the host to resume…</p>
       <button id="btn-resume" class="primary">Resume</button>
+    </div>
+  </div>
+
+  <!-- boss-baby waiting overlay (you're not guessing right now) -->
+  <div id="boss-overlay" class="overlay">
+    <div class="overlay-box">
+      <div class="big">🍼</div>
+      <p id="boss-overlay-msg">Waiting…</p>
+      <p class="hint" id="boss-overlay-sub"></p>
     </div>
   </div>
 
