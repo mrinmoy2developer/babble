@@ -27,19 +27,18 @@
   }
 
   // ----- local state -------------------------------------------------------
-  // Invented "rune" avatars: a hand-designed alien alphabet shipped as SVG image
-  // files in /assets/runes (see assets/make-runes.js). Each glyph is tinted to the
-  // player's chosen colour with a CSS mask, so colour stays a separate choice.
-  // Stored as "g<id>|#rrggbb".
+  // Avatars are real Egyptian hieroglyphs (Unicode, rendered with the Noto Sans
+  // Egyptian Hieroglyphs web font) in a separately-chosen colour, stored as
+  // "glyph|#rrggbb". The glyphs slowly rotate (see .avatar.glyph in style.css).
   const COLORS = ['#ff6b81', '#00d4b8', '#ffb454', '#8a7bff', '#3ddc97', '#ff9bd6',
     '#5ad1ff', '#ffd24d', '#b491ff', '#ff5d73', '#36d399', '#7c5cff'];
-  const RUNE_COUNT = 24;
-  const GLYPH_IDS = Array.from({ length: RUNE_COUNT }, (_, i) => 'g' + i);
+  const HIERO_CP = [
+    0x13000, 0x13012, 0x1301C, 0x13035, 0x13050, 0x13076, 0x13079, 0x13080, 0x130A7, 0x130C0,
+    0x130ED, 0x130F5, 0x13100, 0x1313F, 0x13153, 0x13171, 0x13191, 0x13193, 0x131A3, 0x131CB,
+    0x131F3, 0x13216, 0x13250, 0x13283, 0x132AA, 0x132F9, 0x13313, 0x13333, 0x1335B, 0x133CF,
+  ];
+  const GLYPHS = HIERO_CP.map((cp) => String.fromCodePoint(cp));
   const rand = (a) => a[Math.floor(Math.random() * a.length)];
-  const isRune = (g) => /^g\d+$/.test(g);
-  const runeUrl = (id) => `assets/runes/r${String(id).replace(/\D/g, '').padStart(2, '0')}.svg`;
-  // no quotes inside url() — these strings sit inside double-quoted style="" attrs
-  const runeMaskStyle = (id) => { const u = `url(${runeUrl(id)})`; return `-webkit-mask-image:${u};mask-image:${u}`; };
 
   function parseAvatar(a) {
     const m = String(a || '').match(/^(.+)\|(#[0-9a-fA-F]{6})$/);
@@ -50,7 +49,7 @@
   const me = { id: null, name: localStorage.getItem('babble.name') || '' };
   {
     let pa = parseAvatar(localStorage.getItem('babble.avatar'));
-    if (!pa || !isRune(pa.glyph)) pa = { glyph: rand(GLYPH_IDS), color: rand(COLORS) }; // upgrade old avatars
+    if (!pa || !GLYPHS.includes(pa.glyph)) pa = { glyph: rand(GLYPHS), color: (pa && pa.color) || rand(COLORS) };
     me.glyph = pa.glyph; me.color = pa.color; me.avatar = composeAvatar(me.glyph, me.color);
     localStorage.setItem('babble.avatar', me.avatar);
   }
@@ -70,10 +69,7 @@
   }
   const avatarSpan = (a) => {
     const p = parseAvatar(a);
-    if (p) {
-      if (isRune(p.glyph)) return `<span class="avatar rune" style="color:${p.color};${runeMaskStyle(p.glyph)}"></span>`;
-      return `<span class="avatar glyph" style="color:${p.color}">${escapeHtml(p.glyph)}</span>`; // legacy unicode
-    }
+    if (p) return `<span class="avatar glyph" style="color:${p.color}">${escapeHtml(p.glyph)}</span>`;
     return a ? `<span class="avatar">${escapeHtml(a)}</span>` : ''; // legacy emoji
   };
   // a small persistent profile (offline; "Sign in with Google" could sync this later)
@@ -101,13 +97,12 @@
       colors.appendChild(b);
     });
     const glyphs = box.querySelector('.ab-glyphs');
-    GLYPH_IDS.forEach((id) => {
+    GLYPHS.forEach((ch) => {
       const b = document.createElement('button');
-      b.type = 'button'; b.className = 'ab-glyph'; b.dataset.glyph = id;
-      b.innerHTML = `<span class="avatar rune" style="${runeMaskStyle(id)}"></span>`;
-      b.style.color = me.color; // the masked glyph inherits this via currentColor
-      if (id === me.glyph) b.classList.add('sel');
-      b.onclick = () => { me.glyph = id; commitAvatar(); };
+      b.type = 'button'; b.className = 'ab-glyph'; b.dataset.glyph = ch; b.textContent = ch;
+      b.style.color = me.color;
+      if (ch === me.glyph) b.classList.add('sel');
+      b.onclick = () => { me.glyph = ch; commitAvatar(); };
       glyphs.appendChild(b);
     });
   }
@@ -975,7 +970,7 @@
       const row = $('bot-add-row'); row.innerHTML = '';
       s.botLevels.forEach((l) => {
         const b = document.createElement('button');
-        b.type = 'button'; b.innerHTML = `${l.avatar} ${escapeHtml(l.label)}`;
+        b.type = 'button'; b.innerHTML = `${avatarSpan(l.avatar)} ${escapeHtml(l.label)}`;
         b.onclick = () => socket.emit('bot:add', { level: l.key });
         row.appendChild(b);
       });

@@ -14,7 +14,7 @@
 const { generateWord, listSources } = require('./words');
 const { g2p, score } = require('./phonetics');
 const { synthPhonemesB64, listVoices, defaultVoice } = require('./tts');
-const { BOT_LEVELS, botGuessPhonemes, phonemesToWord } = require('./bots');
+const { BOT_LEVELS, botGuessPhonemes, phonemesToWord, randomBotAvatar } = require('./bots');
 
 const EARLY_BONUS_MAX = 15; // most extra points a lightning-fast correct guess earns
 const MAX_PLAYERS = 12;     // humans + bots
@@ -114,7 +114,7 @@ class Room {
     const taken = new Set([...this.players.values()].map((p) => p.name));
     const name = taken.has(lvl.name) ? `${lvl.name} ${this._botSeq}` : lvl.name;
     this.players.set(id, {
-      id, name, avatar: lvl.avatar, pid: null, score: 0, connected: true,
+      id, name, avatar: cleanAvatar(randomBotAvatar()), pid: null, score: 0, connected: true,
       isHost: false, isBot: true, skill: lvl.skill, botLevel: lvl.key,
     });
     return id;
