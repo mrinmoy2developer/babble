@@ -55,11 +55,15 @@
     return null;
   }
   const composeAvatar = (g, c, dir, speed) => `${g}|${c}|${dir}|${speed}`;
-  // the per-avatar spin, expressed as an inline animation
-  function spinStyle(p) {
+  function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); }
+  // the per-avatar spin, expressed as an inline animation. a stable phase offset
+  // (derived from the avatar itself) keeps avatars from spinning in lockstep when
+  // the list re-renders, so each one looks independent.
+  function spinStyle(p, key) {
     if (!p.speed || REDUCED) return '';
     const dur = (40 - (p.speed / 100) * 36).toFixed(2); // 100% → 4s … low → ~40s
-    return `animation:avatarSpin ${dur}s linear infinite ${p.dir === 'a' ? 'reverse' : 'normal'};`;
+    const phase = (hashStr(key || (p.glyph + p.color + p.dir + p.speed)) % 4000) / 100; // 0..40s, stable
+    return `animation:avatarSpin ${dur}s linear infinite ${p.dir === 'a' ? 'reverse' : 'normal'};animation-delay:-${phase.toFixed(2)}s;`;
   }
 
   const me = { id: null, name: localStorage.getItem('babble.name') || '' };
@@ -88,7 +92,7 @@
   }
   const avatarSpan = (a) => {
     const p = parseAvatar(a);
-    if (p) return `<span class="avatar glyph" style="color:${p.color};${spinStyle(p)}">${escapeHtml(p.glyph)}</span>`;
+    if (p) return `<span class="avatar glyph" style="color:${p.color};${spinStyle(p, a)}">${escapeHtml(p.glyph)}</span>`;
     return a ? `<span class="avatar">${escapeHtml(a)}</span>` : ''; // legacy emoji
   };
   // a small persistent profile (offline; "Sign in with Google" could sync this later)

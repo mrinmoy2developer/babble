@@ -23,9 +23,9 @@ const HIERO = [0x13000, 0x13035, 0x13076, 0x13080, 0x130A7, 0x130C0, 0x130ED, 0x
   0x13153, 0x13171, 0x13191, 0x131A3, 0x131CB, 0x131F3, 0x13216, 0x13250, 0x132AA, 0x132F9, 0x13333, 0x133CF];
 const BOT_COLORS = ['#ff6b81', '#00d4b8', '#ffb454', '#8a7bff', '#3ddc97', '#ff9bd6', '#5ad1ff', '#ffd24d'];
 const glyph = (cp) => String.fromCodePoint(cp);
-// bots get a random hieroglyph, colour, spin direction and speed too
+// bots get a random hieroglyph, colour, spin direction and (well-spread) speed too
 const randomBotAvatar = () =>
-  `${glyph(pick(HIERO))}|${pick(BOT_COLORS)}|${Math.random() < 0.5 ? 'c' : 'a'}|${20 + Math.floor(Math.random() * 70)}`;
+  `${glyph(pick(HIERO))}|${pick(BOT_COLORS)}|${Math.random() < 0.5 ? 'c' : 'a'}|${30 + Math.floor(Math.random() * 70)}`;
 
 const BOT_LEVELS = [
   { key: 'novice', name: 'Babbles',  avatar: `${glyph(0x13000)}|#3ddc97|c|45`, label: 'Novice', skill: 0.15 },
