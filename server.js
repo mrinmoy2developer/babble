@@ -171,6 +171,16 @@ io.on('connection', (socket) => {
     if (room) room.submitGuess(socket.id, text, final); // room broadcasts the tally
   });
 
+  // Bluff mode: submit an honest guess + a decoy, then vote for a decoy
+  socket.on('bluff:submit', ({ real, decoy }) => {
+    const room = currentRoom(socket);
+    if (room) room.submitBluff(socket.id, real, decoy);
+  });
+  socket.on('bluff:vote', ({ key }) => {
+    const room = currentRoom(socket);
+    if (room) room.submitVote(socket.id, key);
+  });
+
   socket.on('round:force', () => {
     const room = currentRoom(socket);
     if (room) room.forceReveal(socket.id);

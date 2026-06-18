@@ -18,6 +18,7 @@ const { BOT_LEVELS, botGuessPhonemes, phonemesToWord, randomBotAvatar } = requir
 
 const EARLY_BONUS_MAX = 15; // most extra points a lightning-fast correct guess earns
 const MAX_PLAYERS = 12;     // humans + bots
+const DECOY_VOTE_POINTS = 30; // points a Bluff decoy earns for each vote it tricks
 
 const DEFAULT_SETTINGS = {
   sources: ['gibberish'],
@@ -30,7 +31,7 @@ const DEFAULT_SETTINGS = {
   previewWaves: true, // let players see/compare waveforms before submitting
   earlyBonus: false,  // award a small speed bonus, proportional to how early you lock in
   allowBots: false,   // let the host add computer players
-  mode: 'normal',     // 'normal' | 'boss' (Boss Baby relay/telephone mode)
+  mode: 'normal',     // 'normal' | 'boss' (Boss Baby relay) | 'bluff' (decoy/fibbage)
   bossAgg: 'mean',    // how the Boss Baby is scored from the others: mean|max|median|trimmed
   maxSubmissions: 1,  // how many guesses a player may submit per round (last one counts)
   voice: '', // piper voice id (resolved to a real default per-room below)
@@ -71,9 +72,12 @@ class Room {
     this.round = 0;
     this.word = null; // { phonemes, spelling, voice, source }
     this.guesses = new Map(); // playerId -> { text, submittedAt }
-    this.phase = 'guess'; // 'guess' (normal) | 'listen' | 'relay' (boss mode)
+    this.phase = 'guess'; // 'guess' | 'listen' | 'relay' (boss) | 'vote' (bluff)
     this.bossId = null;   // current Boss Baby (boss mode)
     this.relayPhonemes = null; this.relayAudio = ''; // the Boss Baby's babble
+    this.decoys = new Map(); // bluff: playerId -> { text, phonemes, audio }
+    this.votes = new Map();  // bluff: voterId -> decoy authorId
+    this.decoyKeys = new Map(); // bluff: opaque key -> authorId (hides who wrote what)
     this._submitCounts = new Map(); // playerId -> submissions this round (for the k cap)
     this.deadline = 0;
     this.paused = false;
@@ -196,7 +200,7 @@ class Room {
       s.allowBots = patch.allowBots;
       if (!patch.allowBots) this._removeAllBots(); // turning it off clears any bots
     }
-    if (patch.mode === 'normal' || patch.mode === 'boss') s.mode = patch.mode;
+    if (['normal', 'boss', 'bluff'].includes(patch.mode)) s.mode = patch.mode;
     if (AGG_FNS.includes(patch.bossAgg)) s.bossAgg = patch.bossAgg;
     if (Number.isFinite(patch.maxSubmissions)) s.maxSubmissions = clamp(patch.maxSubmissions, 1, 5);
     if (typeof patch.voice === 'string') {
@@ -224,6 +228,7 @@ class Room {
     this.guesses.clear();
     this._submitCounts = new Map();
     this.relayPhonemes = null; this.relayAudio = '';
+    this.decoys.clear(); this.votes.clear(); this.decoyKeys.clear();
     this.word = generateWord({
       sources: this.settings.sources,
       difficulty: this.settings.difficulty,
@@ -234,6 +239,7 @@ class Room {
     if (this.state !== 'playing') return; // round was aborted while rendering
 
     if (this.settings.mode === 'boss') return this._beginBossListen();
+    if (this.settings.mode === 'bluff') return this._beginBluffGuess();
 
     // normal mode: everyone hears the original and guesses it
     this.phase = 'guess';
@@ -322,21 +328,131 @@ class Room {
     this._timer = setTimeout(() => this._reveal(), this.settings.roundSeconds * 1000);
   }
 
+  // Bluff — phase 1: everyone hears the original and submits a real guess + a decoy.
+  _beginBluffGuess() {
+    this.phase = 'guess';
+    this.bossId = null;
+    this.deadline = Date.now() + this.settings.roundSeconds * 1000;
+    this.emit('round:start', {
+      round: this.round,
+      totalRounds: this.settings.rounds,
+      mode: 'bluff',
+      phase: 'guess',
+      audio: this.word.audio,
+      source: this.word.source,
+      flag: this.word.flag,
+      answerLang: this.settings.answerLang,
+      previewWaves: this.settings.previewWaves,
+      deadline: this.deadline,
+      syllables: this.word.syllables,
+    });
+    this._scheduleBots();
+    this._timer = setTimeout(() => this._beginBluffVote(), this.settings.roundSeconds * 1000);
+  }
+
+  submitBluff(id, realText, decoyText) {
+    if (this.state !== 'playing' || this.paused || this.settings.mode !== 'bluff' || this.phase !== 'guess') return false;
+    const player = this.players.get(id);
+    if (!player) return false;
+    const prev = this.guesses.get(id);
+    if (prev && prev.final) return false; // one submission per round in bluff
+    this.guesses.set(id, { text: (realText || '').toString().slice(0, 60), submittedAt: Date.now(), final: true });
+    this.decoys.set(id, { text: (decoyText || '').toString().slice(0, 60) });
+    this._emitTally(id, player, true, true, !prev);
+    this._maybeAdvance();
+    return true;
+  }
+
+  // Bluff — phase 2: render every decoy and open voting (you can't vote your own).
+  async _beginBluffVote() {
+    if (this.state !== 'playing' || this.phase !== 'guess') return;
+    clearTimeout(this._timer);
+    this._clearBotTimers();
+    this.phase = 'vote';
+    this.decoyKeys.clear();
+
+    const entries = [...this.decoys.entries()].filter(([, d]) => d.text && d.text.trim());
+    if (entries.length < 2) return this._reveal(); // nothing meaningful to vote on
+
+    const list = [];
+    let n = 0;
+    for (const [authorId, d] of entries) {
+      d.phonemes = d.phonemes || g2p(d.text, this.settings.answerLang);
+      d.audio = await synthPhonemesB64(d.phonemes, { voice: this.settings.voice });
+      if (this.state !== 'playing') return;
+      const key = 'k' + (n++);
+      this.decoyKeys.set(key, authorId);
+      list.push({ key, text: d.text, audio: d.audio });
+    }
+    for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
+
+    this.deadline = Date.now() + this.settings.roundSeconds * 1000;
+    this.emit('round:vote', { decoys: list, deadline: this.deadline }); // no authors revealed
+    for (const [key, authorId] of this.decoyKeys) this.emitTo(authorId, 'bluff:own', { key }); // hide your own
+    this._scheduleBots();
+    this._timer = setTimeout(() => this._reveal(), this.settings.roundSeconds * 1000);
+  }
+
+  submitVote(id, key) {
+    if (this.state !== 'playing' || this.paused || this.settings.mode !== 'bluff' || this.phase !== 'vote') return false;
+    if (!this.players.has(id)) return false;
+    const author = this.decoyKeys.get(key);
+    if (!author || author === id) return false; // invalid, or you can't vote your own
+    if (this.votes.has(id)) return false; // one vote
+    this.votes.set(id, author);
+    const voters = this._playerOrder();
+    this.emit('vote:tally', { voted: voters.filter((v) => this.votes.has(v)).length, total: voters.length });
+    this._maybeAdvance();
+    return true;
+  }
+
   // --- bot play ------------------------------------------------------------
   _scheduleBots() {
     this._clearBotTimers();
     let bots = this.bots();
+    let action = (id) => this._botSubmit(id);
     if (this.settings.mode === 'boss') {
       bots = this.phase === 'listen'
         ? bots.filter((b) => b.id === this.bossId)   // only the boss (if a bot) transmits now
         : bots.filter((b) => b.id !== this.bossId);  // everyone but the boss guesses the relay
+    } else if (this.settings.mode === 'bluff') {
+      action = this.phase === 'vote' ? (id) => this._botBluffVote(id) : (id) => this._botBluffSubmit(id);
     }
     for (const bot of bots) {
-      // lock in somewhere in the first 30–85% of the round (sharper bots sooner)
+      // act somewhere in the first 30–85% of the round (sharper bots sooner)
       const frac = 0.3 + Math.random() * 0.55 - (bot.skill - 0.5) * 0.15;
       const delay = Math.max(800, this.settings.roundSeconds * 1000 * Math.max(0.15, Math.min(0.9, frac)));
-      this._botTimers.push(setTimeout(() => this._botSubmit(bot.id), delay));
+      this._botTimers.push(setTimeout(() => action(bot.id), delay));
     }
+  }
+
+  // bluff: a bot submits an honest guess + a slightly-more-mangled decoy
+  _botBluffSubmit(id) {
+    const bot = this.players.get(id);
+    if (!bot || !bot.isBot) return;
+    if (this.state !== 'playing' || this.paused || this.phase !== 'guess') {
+      this._botTimers.push(setTimeout(() => this._botBluffSubmit(id), 1000)); return;
+    }
+    if (this.guesses.get(id) && this.guesses.get(id).final) return;
+    const realP = botGuessPhonemes(this.word.phonemes, bot.skill);
+    const decoyP = botGuessPhonemes(this.word.phonemes, Math.max(0.1, bot.skill - 0.25));
+    this.guesses.set(id, { text: phonemesToWord(realP), phonemes: realP, submittedAt: Date.now(), final: true });
+    this.decoys.set(id, { text: phonemesToWord(decoyP), phonemes: decoyP });
+    this._emitTally(id, bot, true, true, true);
+    this._maybeAdvance();
+  }
+
+  // bluff: a bot votes for a random decoy that isn't its own
+  _botBluffVote(id) {
+    const bot = this.players.get(id);
+    if (!bot || !bot.isBot) return;
+    if (this.state !== 'playing' || this.paused || this.phase !== 'vote') {
+      this._botTimers.push(setTimeout(() => this._botBluffVote(id), 1000)); return;
+    }
+    if (this.votes.has(id)) return;
+    const keys = [...this.decoyKeys.keys()].filter((k) => this.decoyKeys.get(k) !== id);
+    if (!keys.length) return;
+    this.submitVote(id, keys[Math.floor(Math.random() * keys.length)]);
   }
 
   _botSubmit(id) {
@@ -396,6 +512,16 @@ class Room {
       } else if (this.phase === 'relay') {
         const others = this._cohort();
         if (others.length && others.every((cid) => { const g = this.guesses.get(cid); return g && g.final; })) this._reveal();
+      }
+      return;
+    }
+    if (this.settings.mode === 'bluff') {
+      const c = this._playerOrder();
+      if (this.phase === 'guess') {
+        if (c.length && c.every((cid) => { const g = this.guesses.get(cid); return g && g.final; })) this._beginBluffVote();
+      } else if (this.phase === 'vote') {
+        // everyone who can vote (i.e. has someone else's decoy to pick) has voted
+        if (c.length && c.every((cid) => this.votes.has(cid) || ![...this.decoyKeys.values()].some((a) => a !== cid))) this._reveal();
       }
       return;
     }
@@ -507,9 +633,10 @@ class Room {
       })
     );
 
-    // assign points: guessers earn base+bonus; the Boss Baby earns an aggregate of
-    // how close the others got to the original (rewards a faithful transmission).
+    // assign points by mode: normal = base+bonus; boss = aggregate of the others;
+    // bluff = honest-guess base + a bonus for every vote the decoy tricked.
     let bossInfo = null;
+    let bluffInfo = null;
     if (isBossMode && bossId) {
       const others = results.filter((r) => r.id !== bossId);
       const bossScore = aggregate(others.map((r) => r.base), this.settings.bossAgg);
@@ -522,6 +649,30 @@ class Room {
         guess: bossRes ? bossRes.guess : '', accuracy: bossRes ? bossRes.base : 0,
         score: bossScore, agg: this.settings.bossAgg,
       };
+    } else if (this.settings.mode === 'bluff') {
+      const voteCount = {}; const votersBy = {};
+      for (const [voterId, authorId] of this.votes) {
+        voteCount[authorId] = (voteCount[authorId] || 0) + 1;
+        (votersBy[authorId] = votersBy[authorId] || []).push(voterId);
+      }
+      for (const r of results) {
+        const d = this.decoys.get(r.id) || {};
+        const votes = voteCount[r.id] || 0;
+        r.decoy = d.text || '';
+        r.decoyAudio = d.audio || '';
+        r.decoyVotes = votes;
+        r.decoyPoints = votes * DECOY_VOTE_POINTS;
+        r.bonus = 0;
+        r.points = r.base + r.decoyPoints;
+      }
+      bluffInfo = {
+        pointsPerVote: DECOY_VOTE_POINTS,
+        decoys: results.map((r) => ({
+          id: r.id, name: r.name, avatar: r.avatar,
+          text: r.decoy, audio: r.decoyAudio, votes: r.decoyVotes, points: r.decoyPoints,
+          voters: (votersBy[r.id] || []).map((vid) => { const vp = this.players.get(vid); return vp ? { name: vp.name, avatar: vp.avatar } : null; }).filter(Boolean),
+        })),
+      };
     } else {
       for (const r of results) r.points = r.base + r.bonus;
     }
@@ -533,6 +684,7 @@ class Room {
       totalRounds: this.settings.rounds,
       mode: this.settings.mode,
       boss: bossInfo,
+      bluff: bluffInfo,
       target: {
         phonemes: target,
         audio: this.word.audio,
@@ -611,7 +763,9 @@ class Room {
             bossName: this.bossId ? (this.players.get(this.bossId) || {}).name : null,
             previewWaves: this.settings.previewWaves,
             source: this.word.source,
-            audio: this.settings.mode === 'boss' ? (this.phase === 'relay' ? this.relayAudio : null) : this.word.audio,
+            audio: this.settings.mode === 'boss' ? (this.phase === 'relay' ? this.relayAudio : null)
+              : this.settings.mode === 'bluff' ? (this.phase === 'guess' ? this.word.audio : null)
+                : this.word.audio,
           }
           : null,
     };

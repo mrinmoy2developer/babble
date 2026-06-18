@@ -1063,9 +1063,10 @@
 
   let uiMode = 'normal';
   function applyModeUI(mode) {
-    uiMode = mode === 'boss' ? 'boss' : 'normal';
+    uiMode = ['normal', 'boss', 'bluff'].includes(mode) ? mode : 'normal';
     $('mode-normal').classList.toggle('active', uiMode === 'normal');
     $('mode-boss').classList.toggle('active', uiMode === 'boss');
+    $('mode-bluff').classList.toggle('active', uiMode === 'bluff');
     $('bossagg-row').hidden = uiMode !== 'boss'; // the aggregation choice is boss-only
   }
   function pushSettings() {
@@ -1100,6 +1101,7 @@
   });
   $('mode-normal').onclick = () => { applyModeUI('normal'); pushSettings(); };
   $('mode-boss').onclick = () => { applyModeUI('boss'); pushSettings(); };
+  $('mode-bluff').onclick = () => { applyModeUI('bluff'); pushSettings(); };
   $('bossagg').onchange = pushSettings;
   $('set-public').onchange = pushSettings;
   $('set-preview').onchange = pushSettings;
@@ -1192,6 +1194,7 @@
   let origPlayer = null; // play-screen "Original" waveform player (when preview on)
   let roundMode = 'normal', roundPhase = 'guess', curBoss = null; // current round shape
   let maxSub = 1, mySubmits = 0; // per-round submission cap + my count
+  let myVoteKey = null, myOwnKey = null; // bluff: my vote + my own decoy's key
   // ▶ Play always uses a clean 1× reference; only the speed button uses the slider,
   // so reveal / next-round playback is never stuck at a previous round's speed.
   const playWordAt = (rate) => { if (origPlayer) origPlayer.play(0, rate); else playB64(current.audio, rate); };
@@ -1310,6 +1313,58 @@
     const b = $('boss-banner');
     if (html) { b.innerHTML = html; b.hidden = false; } else { b.hidden = true; }
   }
+  // reset the play screen to the normal guess layout (hide bluff bits)
+  function resetPlayLayout() {
+    $('guess-form').hidden = false;
+    $('vote-panel').hidden = true;
+    $('decoy-row').hidden = true;
+    $('btn-lockin').hidden = false;
+    $('decoy-input').value = ''; $('decoy-input').disabled = false;
+  }
+  // ----- Bluff mode --------------------------------------------------------
+  function submitBluff() {
+    if (lockedIn) return;
+    const real = $('guess-input').value.trim();
+    const decoy = $('decoy-input').value.trim();
+    socket.emit('bluff:submit', { real, decoy });
+    setLocked(true);
+    $('decoy-input').disabled = true;
+    $('guess-status').textContent = '✅ Submitted! When everyone’s in, you’ll vote on the decoys.';
+  }
+  function buildVoteList(decoys) {
+    const ul = $('vote-list'); ul.innerHTML = '';
+    decoys.forEach((dc) => {
+      const li = document.createElement('li');
+      li.dataset.key = dc.key;
+      li.innerHTML =
+        `<button class="play-btn vplay" type="button" title="Play">▶</button>` +
+        `<canvas class="vwave wave"></canvas>` +
+        `<span class="vtxt">${spanLetters(dc.text)}</span>` +
+        `<button class="vpick primary small" type="button">Pick</button>`;
+      ul.appendChild(li);
+      decode(dc.audio).then((buf) => {
+        const player = makePlayer(buf, li.querySelector('.vwave'), {});
+        li.querySelector('.vplay').onclick = () => player.play(0);
+      }).catch(() => {});
+      li.querySelector('.vpick').onclick = () => castVote(dc.key);
+    });
+    applyOwnDecoy();
+  }
+  function applyOwnDecoy() {
+    if (!myOwnKey) return;
+    const li = $('vote-list').querySelector(`li[data-key="${myOwnKey}"]`);
+    if (li) { li.classList.add('mine'); const b = li.querySelector('.vpick'); if (b) { b.disabled = true; b.textContent = 'Yours'; } }
+  }
+  function castVote(key) {
+    if (myVoteKey || key === myOwnKey) return; // one vote, never your own
+    myVoteKey = key;
+    socket.emit('bluff:vote', { key });
+    $('vote-list').querySelectorAll('li').forEach((li) => {
+      li.classList.toggle('picked', li.dataset.key === key);
+      const b = li.querySelector('.vpick'); if (b) b.disabled = true;
+    });
+    $('vote-status').textContent = '✅ Vote cast! Waiting for the others…';
+  }
   function showBossOverlay(msg, sub) {
     $('boss-overlay-msg').innerHTML = msg;
     $('boss-overlay-sub').textContent = sub || '';
@@ -1318,6 +1373,7 @@
   function hideBossOverlay() { $('boss-overlay').classList.remove('on'); }
   $('guess-form').addEventListener('submit', (e) => {
     e.preventDefault();
+    if (roundMode === 'bluff') return submitBluff(); // real + decoy in one go
     submitGuess($('guess-input').value.trim(), false); // Enter / Submit = tentative
   });
   $('btn-lockin').onclick = () => submitGuess($('guess-input').value.trim(), true);
@@ -1395,6 +1451,8 @@
     $('syl-hint').textContent = `~${d.syllables} syllable${d.syllables > 1 ? 's' : ''}.`;
     $('guess-label').textContent = `Spell what you heard (${LANG_LABEL[answerLang] || answerLang})`;
     resetGuessUI();
+    resetPlayLayout();
+    myVoteKey = null; myOwnKey = null;
     show('play');
     startTimer(d.deadline);
 
@@ -1410,8 +1468,34 @@
       return;
     }
 
+    if (roundMode === 'bluff') {
+      setBossBanner(`🎭 <b>Bluff!</b> Submit your real guess <i>and</i> a decoy — then everyone votes on the decoys. You score +${30} for each player your decoy fools.`);
+      $('decoy-row').hidden = false;
+      $('btn-lockin').hidden = true; // bluff is a single submission
+      await beginListening(d.audio);
+      return;
+    }
+
     setBossBanner(null);
     await beginListening(d.audio); // normal: everyone hears the original
+  });
+
+  // Bluff phase 2: vote on the decoys
+  socket.on('round:vote', (d) => {
+    roundPhase = 'vote';
+    hideBossOverlay();
+    setBossBanner('🎭 <b>Vote!</b> Which babble sounds most like the word? Pick the most convincing — you can’t pick your own.');
+    $('guess-form').hidden = true;
+    $('preview-area').classList.remove('on');
+    $('vote-panel').hidden = false;
+    $('vote-status').textContent = '';
+    show('play');
+    buildVoteList(d.decoys);
+    startTimer(d.deadline);
+  });
+  socket.on('bluff:own', (d) => { myOwnKey = d.key; applyOwnDecoy(); }); // hide your own decoy
+  socket.on('vote:tally', (d) => {
+    $('vote-status').textContent = `🗳️ ${d.voted}/${d.total} voted` + (myVoteKey ? ' · your vote is in' : '');
   });
 
   // boss mode: only the Boss Baby receives the original audio
@@ -1482,7 +1566,7 @@
         `${r.isBot ? ' <span class="bot-tag">🤖</span>' : ''}` +
         `${r.isBoss ? ' <span class="boss-badge" title="Boss Baby — scored on how close the others got">🎙️ Boss</span>' : ''}` +
         `<span class="guessed"> — “${r.guess ? spanLetters(r.guess) : '—'}”</span></span>` +
-        `<span class="pts">+${r.points}${r.bonus ? `<span class="bonus" title="early-submission bonus">⚡+${r.bonus}</span>` : ''}</span>` +
+        `<span class="pts">+${r.points}${r.bonus ? `<span class="bonus" title="early-submission bonus">⚡+${r.bonus}</span>` : ''}${r.decoyPoints ? `<span class="decoy-pts" title="decoy fooled voters">🎭+${r.decoyPoints}</span>` : ''}</span>` +
         `<span class="total">${r.total} pts</span>` +
         `<canvas class="wave"></canvas>`;
       ul.appendChild(li);
@@ -1521,6 +1605,27 @@
     } else {
       $('reveal-boss').hidden = true;
     }
+
+    // Bluff: show the decoys, who they fooled, and the bonus points earned
+    if (d.mode === 'bluff' && d.bluff) {
+      $('reveal-bluff').hidden = false;
+      const bd = $('bluff-decoys'); bd.innerHTML = '';
+      [...d.bluff.decoys].filter((x) => x.text).sort((a, b) => b.votes - a.votes).forEach((dc) => {
+        const li = document.createElement('li');
+        const fooled = dc.voters.map((v) => `${avatarSpan(v.avatar)} ${escapeHtml(v.name)}`).join(', ');
+        li.innerHTML =
+          `<button class="play-btn bdplay" type="button" ${dc.audio ? '' : 'disabled'} title="Play decoy">▶</button>` +
+          `<span class="bd-who">${avatarSpan(dc.avatar)} <b>${escapeHtml(dc.name)}</b></span>` +
+          `<span class="bd-text">“${spanLetters(dc.text)}”</span>` +
+          `<span class="bd-votes">${dc.votes ? `fooled ${fooled}` : 'fooled nobody'}</span>` +
+          `<span class="bd-pts">+${dc.points}</span>`;
+        bd.appendChild(li);
+        if (dc.audio) li.querySelector('.bdplay').onclick = () => playB64(dc.audio);
+      });
+    } else {
+      $('reveal-bluff').hidden = true;
+    }
+
     for (const { li, r } of rows) {
       const guessBuf = r.audio ? await decode(r.audio).catch(() => null) : null;
       const player = makePlayer(guessBuf, li.querySelector('.wave'),

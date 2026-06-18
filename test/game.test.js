@@ -64,6 +64,17 @@ ok('mode accepts boss', r3.updateSettings('h', { mode: 'boss' }) && r3.settings.
 ok('bad mode ignored', r3.updateSettings('h', { mode: 'weird' }) && r3.settings.mode === 'boss');
 ok('bossAgg accepts median', r3.updateSettings('h', { bossAgg: 'median' }) && r3.settings.bossAgg === 'median');
 ok('maxSubmissions clamped to <= 5', r3.updateSettings('h', { maxSubmissions: 99 }) && r3.settings.maxSubmissions === 5);
+ok('mode accepts bluff', r3.updateSettings('h', { mode: 'bluff' }) && r3.settings.mode === 'bluff');
+
+// bluff: you can't vote for your own decoy, and can only vote once
+const r4 = new Room('T4', () => {});
+r4.addPlayer('a', 'A'); r4.addPlayer('b', 'B');
+r4.updateSettings('a', { mode: 'bluff' });
+r4.state = 'playing'; r4.phase = 'vote';
+r4.decoyKeys.set('k0', 'a'); r4.decoyKeys.set('k1', 'b');
+ok('cannot vote your own decoy', r4.submitVote('a', 'k0') === false);
+ok('can vote another decoy', r4.submitVote('a', 'k1') === true && r4.votes.get('a') === 'b');
+ok('cannot vote twice', r4.submitVote('a', 'k1') === false);
 
 // summary shape for the public browser
 const sum = room.summary();

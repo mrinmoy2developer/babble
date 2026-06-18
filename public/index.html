@@ -177,6 +177,9 @@
               <button id="mode-boss" class="mode-card" type="button">
                 <b>🎙️ Boss Baby</b><small>One player relays the word; others guess their babble.</small>
               </button>
+              <button id="mode-bluff" class="mode-card" type="button">
+                <b>🎭 Bluff</b><small>Submit a real guess + a decoy; score when others pick your fake.</small>
+              </button>
             </div>
           </div>
 
@@ -288,6 +291,10 @@
       <form id="guess-form" class="guess">
         <label id="guess-label">Spell what you heard (English)</label>
         <input id="guess-input" autocomplete="off" placeholder="type your best guess…" />
+        <div id="decoy-row" class="decoy-row" hidden>
+          <label id="decoy-label">🎭 Your decoy — a convincing fake to fool everyone else</label>
+          <input id="decoy-input" autocomplete="off" placeholder="type a believable fake spelling…" />
+        </div>
         <div class="row">
           <button type="submit" id="btn-submit" class="primary">💾 Submit</button>
           <button type="button" id="btn-lockin" class="ghost">🔒 Lock in</button>
@@ -297,6 +304,14 @@
       </form>
       <p id="guess-status" class="hint"></p>
       <p id="submitted-count" class="count"></p>
+
+      <!-- Bluff voting phase -->
+      <div id="vote-panel" class="vote-panel" hidden>
+        <h3>🎭 Which babble is the real word?</h3>
+        <p class="hint">Listen and pick the most convincing one — you can't pick your own.</p>
+        <ul id="vote-list" class="vote-list"></ul>
+        <p id="vote-status" class="count"></p>
+      </div>
 
       <div id="preview-area" class="preview-area">
         <div class="orig-wave-wrap">
@@ -326,6 +341,11 @@
           <span class="rb-meta"><span id="reveal-boss-who"></span> relayed it — others guessed <b>this</b>, but were scored on the original.</span>
         </div>
         <canvas id="relay-wave" class="wave"></canvas>
+      </div>
+
+      <div id="reveal-bluff" class="reveal-bluff" hidden>
+        <h4>🎭 The decoys <small class="hint-inline">— who fooled whom</small></h4>
+        <ul id="bluff-decoys" class="bluff-decoys"></ul>
       </div>
 
       <p class="legend">Each player's waveform is overlaid on the <span class="ghost-key">original</span> so you can see how close their <span class="guess-key">guess</span> sounds.</p>
